@@ -15,14 +15,14 @@ App de seguimiento de asignaturas, exámenes y tareas del curso, con feed de cal
    git add .
    git commit -m "Seguimiento Estudios"
    git branch -M main
-   git remote add origin git@github.com:<tu-usuario>/seguimiento-estudios.git
+   git remote add origin https://github.com/Rodriagra/seguimiento-estudios.git
    git push -u origin main
    ```
-2. El workflow `.github/workflows/docker-publish.yml` se dispara solo en cada push a `main`: construye la imagen y la publica en `ghcr.io/<tu-usuario>/seguimiento-estudios:latest`.
-3. Edita `docker-compose.yml` y cambia `<usuario>` por tu usuario/organización de GitHub.
+2. El workflow `.github/workflows/docker-publish.yml` se dispara solo en cada push a `main`: construye la imagen y la publica en `ghcr.io/rodriagra/seguimiento-estudios:latest`.
+3. `docker-compose.yml` ya apunta a esa imagen.
 4. Si el paquete queda privado en GHCR, en el NAS haz login antes de desplegar (con un [token de acceso personal](https://github.com/settings/tokens) con permiso `read:packages`):
    ```bash
-   docker login ghcr.io -u <tu-usuario>
+   docker login ghcr.io -u Rodriagra
    ```
 
 A partir de aquí, cada `git push` a `main` reconstruye la imagen y **Watchtower** la despliega sola en el NAS (misma label que ya usas en Sonarr/Radarr).

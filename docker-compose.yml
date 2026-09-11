@@ -1,7 +1,7 @@
 services:
   seguimiento-estudios:
     # Cuando tengas el paquete publicado en GHCR (ver README, paso 0), usa esta imagen:
-    image: ghcr.io/<usuario>/seguimiento-estudios:latest
+    image: ghcr.io/rodriagra/seguimiento-estudios:latest
     # Para construir localmente en vez de tirar de GHCR, comenta la línea "image" y descomenta esta:
     # build: .
     container_name: seguimiento-estudios
