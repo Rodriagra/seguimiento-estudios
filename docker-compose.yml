@@ -9,14 +9,14 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - /mnt/tank/appdata/seguimiento-estudios:/app/data
+      - /mnt/tank/configs/seguimiento-estudios:/app/data
     environment:
       - PORT=3000
       - DB_PATH=/app/data/estudios.db
       # Si el volumen en el host pertenece a otro usuario (PUID/PGID 568 típico de TrueNAS SCALE),
       # asegúrate de que /mnt/tank/appdata/seguimiento-estudios sea propiedad de ese uid/gid,
       # o fija aquí el usuario del contenedor:
-      # user: "568:568"
+      user: "568:568"
     networks:
       - homelab-net
     labels:
