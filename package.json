@@ -1,0 +1,17 @@
+{
+  "name": "seguimiento-estudios",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Seguimiento de asignaturas, examenes y tareas con feed de calendario ICS",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}
