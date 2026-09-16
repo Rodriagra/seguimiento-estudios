@@ -13,20 +13,24 @@ const SELECT_JOIN = `
 `;
 
 router.get('/', (req, res) => {
-  const rows = db.prepare(`${SELECT_JOIN} ORDER BY fecha_limite ASC`).all();
+  const rows = db.prepare(`${SELECT_JOIN} ORDER BY (fecha_limite IS NULL), fecha_limite ASC`).all();
   res.json(rows);
 });
 
 router.post('/', (req, res) => {
-  const { asignatura_id, titulo, fecha_limite, estado, prioridad } = req.body;
-  if (!asignatura_id || !titulo || !fecha_limite) {
-    return res.status(400).json({ error: 'asignatura_id, titulo y fecha_limite son obligatorios' });
+  const { asignatura_id, titulo, fecha_limite, estado, prioridad, opcional } = req.body;
+  if (!asignatura_id || !titulo || !titulo.trim()) {
+    return res.status(400).json({ error: 'asignatura_id y titulo son obligatorios' });
   }
   const estadoFinal = ESTADOS.includes(estado) ? estado : 'pendiente';
   const prioridadFinal = PRIORIDADES.includes(prioridad) ? prioridad : 'media';
+  const opcionalFinal = opcional ? 1 : 0;
+  const fechaFinal = fecha_limite || null;
   const info = db
-    .prepare('INSERT INTO tareas (asignatura_id, titulo, fecha_limite, estado, prioridad) VALUES (?, ?, ?, ?, ?)')
-    .run(asignatura_id, titulo.trim(), fecha_limite, estadoFinal, prioridadFinal);
+    .prepare(
+      'INSERT INTO tareas (asignatura_id, titulo, fecha_limite, estado, prioridad, opcional) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    .run(asignatura_id, titulo.trim(), fechaFinal, estadoFinal, prioridadFinal, opcionalFinal);
   const row = db.prepare(`${SELECT_JOIN} WHERE tareas.id = ?`).get(info.lastInsertRowid);
   res.status(201).json(row);
 });
@@ -36,12 +40,13 @@ router.put('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'no encontrada' });
   const asignatura_id = req.body.asignatura_id ?? existing.asignatura_id;
   const titulo = req.body.titulo?.trim() || existing.titulo;
-  const fecha_limite = req.body.fecha_limite ?? existing.fecha_limite;
+  const fecha_limite = 'fecha_limite' in req.body ? req.body.fecha_limite || null : existing.fecha_limite;
   const estado = ESTADOS.includes(req.body.estado) ? req.body.estado : existing.estado;
   const prioridad = PRIORIDADES.includes(req.body.prioridad) ? req.body.prioridad : existing.prioridad;
+  const opcional = 'opcional' in req.body ? (req.body.opcional ? 1 : 0) : existing.opcional;
   db.prepare(
-    'UPDATE tareas SET asignatura_id = ?, titulo = ?, fecha_limite = ?, estado = ?, prioridad = ? WHERE id = ?'
-  ).run(asignatura_id, titulo, fecha_limite, estado, prioridad, req.params.id);
+    'UPDATE tareas SET asignatura_id = ?, titulo = ?, fecha_limite = ?, estado = ?, prioridad = ?, opcional = ? WHERE id = ?'
+  ).run(asignatura_id, titulo, fecha_limite, estado, prioridad, opcional, req.params.id);
   res.json(db.prepare(`${SELECT_JOIN} WHERE tareas.id = ?`).get(req.params.id));
 });
 

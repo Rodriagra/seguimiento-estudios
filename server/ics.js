@@ -63,7 +63,7 @@ export function buildCalendarFeed({ examenes, tareas }) {
     );
   }
 
-  for (const tarea of tareas.filter((t) => t.estado !== 'hecha')) {
+  for (const tarea of tareas.filter((t) => t.estado !== 'hecha' && t.fecha_limite)) {
     events.push(
       buildEvent({
         uid: `tarea-${tarea.id}@seguimiento-estudios`,

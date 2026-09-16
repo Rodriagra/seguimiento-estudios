@@ -123,12 +123,18 @@ function renderTareas() {
     return;
   }
   ul.innerHTML = state.tareas
-    .map(
-      (t) => `
+    .map((t) => {
+      const meta = [
+        t.asignatura_nombre,
+        t.fecha_limite ? fmtDate(t.fecha_limite) : 'sin fecha',
+        `prioridad ${t.prioridad}`,
+        t.opcional ? 'opcional' : 'obligatoria',
+      ].join(' · ');
+      return `
     <li style="border-left-color:${t.asignatura_color}">
       <div class="item-main">
         <span class="item-title">${t.titulo}</span>
-        <span class="item-meta">${t.asignatura_nombre} · ${fmtDate(t.fecha_limite)} · prioridad ${t.prioridad}</span>
+        <span class="item-meta">${meta}</span>
       </div>
       <div class="item-actions">
         <select data-action="estado-tarea" data-id="${t.id}">
@@ -136,11 +142,33 @@ function renderTareas() {
           <option value="en_progreso" ${t.estado === 'en_progreso' ? 'selected' : ''}>En progreso</option>
           <option value="hecha" ${t.estado === 'hecha' ? 'selected' : ''}>Hecha</option>
         </select>
+        <button class="action-secondary" data-action="edit-tarea" data-id="${t.id}">Editar</button>
         <button class="action-danger" data-action="del-tarea" data-id="${t.id}">Eliminar</button>
       </div>
-    </li>`
-    )
+    </li>`;
+    })
     .join('');
+}
+
+function startEditTarea(tarea) {
+  const form = document.getElementById('form-tarea');
+  form.elements['id'].value = tarea.id;
+  form.elements['asignatura_id'].value = tarea.asignatura_id;
+  form.elements['titulo'].value = tarea.titulo;
+  form.elements['fecha_limite'].value = toDatetimeLocalValue(tarea.fecha_limite);
+  form.elements['prioridad'].value = tarea.prioridad;
+  form.elements['opcional'].value = tarea.opcional ? '1' : '0';
+  document.getElementById('btn-tarea-submit').textContent = 'Guardar cambios';
+  document.getElementById('btn-tarea-cancelar').hidden = false;
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelEditTarea() {
+  const form = document.getElementById('form-tarea');
+  form.reset();
+  form.elements['id'].value = '';
+  document.getElementById('btn-tarea-submit').textContent = 'Añadir';
+  document.getElementById('btn-tarea-cancelar').hidden = true;
 }
 
 function renderCategoriasServidor() {
@@ -171,21 +199,12 @@ function renderTareasServidor() {
     return;
   }
   ul.innerHTML = state.tareasServidor
-    .map((t) => {
-      const meta = [
-        t.categoria_nombre,
-        `prioridad ${t.prioridad}`,
-        t.opcional ? 'opcional' : 'obligatoria',
-        t.fecha_limite ? fmtDate(t.fecha_limite) : 'sin fecha',
-        t.descripcion || null,
-      ]
-        .filter(Boolean)
-        .join(' · ');
-      return `
+    .map(
+      (t) => `
     <li style="border-left-color:${t.categoria_color}">
       <div class="item-main">
         <span class="item-title">${t.titulo}</span>
-        <span class="item-meta">${meta}</span>
+        <span class="item-meta">${t.categoria_nombre} · prioridad ${t.prioridad}${t.descripcion ? ' · ' + t.descripcion : ''}</span>
       </div>
       <div class="item-actions">
         <select data-action="estado-tarea-servidor" data-id="${t.id}">
@@ -196,8 +215,8 @@ function renderTareasServidor() {
         <button class="action-secondary" data-action="edit-tarea-servidor" data-id="${t.id}">Editar</button>
         <button class="action-danger" data-action="del-tarea-servidor" data-id="${t.id}">Eliminar</button>
       </div>
-    </li>`;
-    })
+    </li>`
+    )
     .join('');
 }
 
@@ -207,9 +226,7 @@ function startEditTareaServidor(tarea) {
   form.elements['categoria_id'].value = tarea.categoria_id;
   form.elements['titulo'].value = tarea.titulo;
   form.elements['descripcion'].value = tarea.descripcion || '';
-  form.elements['fecha_limite'].value = toDatetimeLocalValue(tarea.fecha_limite);
   form.elements['prioridad'].value = tarea.prioridad;
-  form.elements['opcional'].value = tarea.opcional ? '1' : '0';
   document.getElementById('btn-tarea-servidor-submit').textContent = 'Guardar cambios';
   document.getElementById('btn-tarea-servidor-cancelar').hidden = false;
   form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -299,16 +316,20 @@ function initForms() {
   document.getElementById('form-tarea').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    await api('/api/tareas', {
-      method: 'POST',
-      body: JSON.stringify({
-        asignatura_id: Number(fd.get('asignatura_id')),
-        titulo: fd.get('titulo'),
-        fecha_limite: new Date(fd.get('fecha_limite')).toISOString(),
-        prioridad: fd.get('prioridad'),
-      }),
-    });
-    e.target.reset();
+    const id = fd.get('id');
+    const payload = {
+      asignatura_id: Number(fd.get('asignatura_id')),
+      titulo: fd.get('titulo'),
+      fecha_limite: fd.get('fecha_limite') ? new Date(fd.get('fecha_limite')).toISOString() : null,
+      prioridad: fd.get('prioridad'),
+      opcional: fd.get('opcional') === '1',
+    };
+    if (id) {
+      await api(`/api/tareas/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    } else {
+      await api('/api/tareas', { method: 'POST', body: JSON.stringify(payload) });
+    }
+    cancelEditTarea();
     await loadAll();
   });
 
@@ -332,8 +353,6 @@ function initForms() {
       titulo: fd.get('titulo'),
       descripcion: fd.get('descripcion'),
       prioridad: fd.get('prioridad'),
-      opcional: fd.get('opcional') === '1',
-      fecha_limite: fd.get('fecha_limite') ? new Date(fd.get('fecha_limite')).toISOString() : null,
     };
     if (id) {
       await api(`/api/tareas-servidor/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
@@ -359,6 +378,11 @@ function initListActions() {
     } else if (action === 'del-tarea') {
       await api(`/api/tareas/${id}`, { method: 'DELETE' });
       await loadAll();
+    } else if (action === 'edit-tarea') {
+      const tarea = state.tareas.find((t) => t.id === Number(id));
+      if (tarea) startEditTarea(tarea);
+    } else if (action === 'cancelar-tarea') {
+      cancelEditTarea();
     } else if (action === 'del-categoria-servidor' && confirm('¿Eliminar categoría y sus tareas asociadas?')) {
       await api(`/api/categorias-servidor/${id}`, { method: 'DELETE' });
       await loadAll();

@@ -29,9 +29,10 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     asignatura_id INTEGER NOT NULL REFERENCES asignaturas(id) ON DELETE CASCADE,
     titulo TEXT NOT NULL,
-    fecha_limite TEXT NOT NULL,
+    fecha_limite TEXT,
     estado TEXT NOT NULL DEFAULT 'pendiente',
-    prioridad TEXT NOT NULL DEFAULT 'media'
+    prioridad TEXT NOT NULL DEFAULT 'media',
+    opcional INTEGER NOT NULL DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS categorias_servidor (
@@ -47,19 +48,39 @@ db.exec(`
     descripcion TEXT NOT NULL DEFAULT '',
     estado TEXT NOT NULL DEFAULT 'pendiente',
     prioridad TEXT NOT NULL DEFAULT 'media',
-    opcional INTEGER NOT NULL DEFAULT 0,
-    fecha_limite TEXT,
     creado_en TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
 
-// Migración: añade columnas nuevas si la base de datos viene de una versión anterior.
-const tareasServidorCols = db.prepare("PRAGMA table_info(tareas_servidor)").all().map((c) => c.name);
-if (!tareasServidorCols.includes('opcional')) {
-  db.exec('ALTER TABLE tareas_servidor ADD COLUMN opcional INTEGER NOT NULL DEFAULT 0');
+// Migración: en 'tareas' (Estudios), la fecha límite pasa a ser opcional y se añade 'opcional'.
+// SQLite no permite relajar un NOT NULL con ALTER TABLE, así que se reconstruye la tabla.
+const tareasCols = db.prepare('PRAGMA table_info(tareas)').all().map((c) => c.name);
+if (!tareasCols.includes('opcional')) {
+  db.exec(`
+    CREATE TABLE tareas_nueva (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      asignatura_id INTEGER NOT NULL REFERENCES asignaturas(id) ON DELETE CASCADE,
+      titulo TEXT NOT NULL,
+      fecha_limite TEXT,
+      estado TEXT NOT NULL DEFAULT 'pendiente',
+      prioridad TEXT NOT NULL DEFAULT 'media',
+      opcional INTEGER NOT NULL DEFAULT 0
+    );
+    INSERT INTO tareas_nueva (id, asignatura_id, titulo, fecha_limite, estado, prioridad, opcional)
+      SELECT id, asignatura_id, titulo, fecha_limite, estado, prioridad, 0 FROM tareas;
+    DROP TABLE tareas;
+    ALTER TABLE tareas_nueva RENAME TO tareas;
+  `);
 }
-if (!tareasServidorCols.includes('fecha_limite')) {
-  db.exec('ALTER TABLE tareas_servidor ADD COLUMN fecha_limite TEXT');
+
+// Migración: las Tareas del Servidor no llevan fecha ni opcional; se quitan si venían de un
+// parche anterior que sí las tenía.
+const tareasServidorCols = db.prepare('PRAGMA table_info(tareas_servidor)').all().map((c) => c.name);
+if (tareasServidorCols.includes('opcional')) {
+  db.exec('ALTER TABLE tareas_servidor DROP COLUMN opcional');
+}
+if (tareasServidorCols.includes('fecha_limite')) {
+  db.exec('ALTER TABLE tareas_servidor DROP COLUMN fecha_limite');
 }
 
 const ASIGNATURAS_INICIALES = [

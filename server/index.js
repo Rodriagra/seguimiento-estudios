@@ -35,7 +35,7 @@ app.get('/api/dashboard', (req, res) => {
     .prepare(
       `SELECT tareas.*, asignaturas.nombre AS asignatura_nombre, asignaturas.color AS asignatura_color
        FROM tareas JOIN asignaturas ON asignaturas.id = tareas.asignatura_id
-       WHERE estado != 'hecha' ORDER BY fecha_limite ASC LIMIT 10`
+       WHERE estado != 'hecha' AND fecha_limite IS NOT NULL ORDER BY fecha_limite ASC LIMIT 10`
     )
     .all();
   res.json({ examenes, tareas });
