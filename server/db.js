@@ -47,9 +47,20 @@ db.exec(`
     descripcion TEXT NOT NULL DEFAULT '',
     estado TEXT NOT NULL DEFAULT 'pendiente',
     prioridad TEXT NOT NULL DEFAULT 'media',
+    opcional INTEGER NOT NULL DEFAULT 0,
+    fecha_limite TEXT,
     creado_en TEXT NOT NULL DEFAULT (datetime('now'))
   );
 `);
+
+// Migración: añade columnas nuevas si la base de datos viene de una versión anterior.
+const tareasServidorCols = db.prepare("PRAGMA table_info(tareas_servidor)").all().map((c) => c.name);
+if (!tareasServidorCols.includes('opcional')) {
+  db.exec('ALTER TABLE tareas_servidor ADD COLUMN opcional INTEGER NOT NULL DEFAULT 0');
+}
+if (!tareasServidorCols.includes('fecha_limite')) {
+  db.exec('ALTER TABLE tareas_servidor ADD COLUMN fecha_limite TEXT');
+}
 
 const ASIGNATURAS_INICIALES = [
   ['Inglés', '#0ea5e9'],

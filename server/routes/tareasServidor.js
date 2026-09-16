@@ -18,17 +18,19 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { categoria_id, titulo, descripcion, estado, prioridad } = req.body;
+  const { categoria_id, titulo, descripcion, estado, prioridad, opcional, fecha_limite } = req.body;
   if (!categoria_id || !titulo || !titulo.trim()) {
     return res.status(400).json({ error: 'categoria_id y titulo son obligatorios' });
   }
   const estadoFinal = ESTADOS.includes(estado) ? estado : 'pendiente';
   const prioridadFinal = PRIORIDADES.includes(prioridad) ? prioridad : 'media';
+  const opcionalFinal = opcional ? 1 : 0;
+  const fechaFinal = fecha_limite || null;
   const info = db
     .prepare(
-      'INSERT INTO tareas_servidor (categoria_id, titulo, descripcion, estado, prioridad) VALUES (?, ?, ?, ?, ?)'
+      'INSERT INTO tareas_servidor (categoria_id, titulo, descripcion, estado, prioridad, opcional, fecha_limite) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(categoria_id, titulo.trim(), descripcion || '', estadoFinal, prioridadFinal);
+    .run(categoria_id, titulo.trim(), descripcion || '', estadoFinal, prioridadFinal, opcionalFinal, fechaFinal);
   const row = db.prepare(`${SELECT_JOIN} WHERE tareas_servidor.id = ?`).get(info.lastInsertRowid);
   res.status(201).json(row);
 });
@@ -41,9 +43,11 @@ router.put('/:id', (req, res) => {
   const descripcion = req.body.descripcion ?? existing.descripcion;
   const estado = ESTADOS.includes(req.body.estado) ? req.body.estado : existing.estado;
   const prioridad = PRIORIDADES.includes(req.body.prioridad) ? req.body.prioridad : existing.prioridad;
+  const opcional = 'opcional' in req.body ? (req.body.opcional ? 1 : 0) : existing.opcional;
+  const fecha_limite = 'fecha_limite' in req.body ? req.body.fecha_limite || null : existing.fecha_limite;
   db.prepare(
-    'UPDATE tareas_servidor SET categoria_id = ?, titulo = ?, descripcion = ?, estado = ?, prioridad = ? WHERE id = ?'
-  ).run(categoria_id, titulo, descripcion, estado, prioridad, req.params.id);
+    'UPDATE tareas_servidor SET categoria_id = ?, titulo = ?, descripcion = ?, estado = ?, prioridad = ?, opcional = ?, fecha_limite = ? WHERE id = ?'
+  ).run(categoria_id, titulo, descripcion, estado, prioridad, opcional, fecha_limite, req.params.id);
   res.json(db.prepare(`${SELECT_JOIN} WHERE tareas_servidor.id = ?`).get(req.params.id));
 });
 

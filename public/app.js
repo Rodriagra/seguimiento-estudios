@@ -3,6 +3,13 @@ const state = { asignaturas: [], examenes: [], tareas: [], categoriasServidor: [
 const fmtDate = (iso) =>
   new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 
+const toDatetimeLocalValue = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
 async function api(path, options = {}) {
   const res = await fetch(path, {
     headers: { 'Content-Type': 'application/json' },
@@ -164,12 +171,21 @@ function renderTareasServidor() {
     return;
   }
   ul.innerHTML = state.tareasServidor
-    .map(
-      (t) => `
+    .map((t) => {
+      const meta = [
+        t.categoria_nombre,
+        `prioridad ${t.prioridad}`,
+        t.opcional ? 'opcional' : 'obligatoria',
+        t.fecha_limite ? fmtDate(t.fecha_limite) : 'sin fecha',
+        t.descripcion || null,
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      return `
     <li style="border-left-color:${t.categoria_color}">
       <div class="item-main">
         <span class="item-title">${t.titulo}</span>
-        <span class="item-meta">${t.categoria_nombre} · prioridad ${t.prioridad}${t.descripcion ? ' · ' + t.descripcion : ''}</span>
+        <span class="item-meta">${meta}</span>
       </div>
       <div class="item-actions">
         <select data-action="estado-tarea-servidor" data-id="${t.id}">
@@ -177,11 +193,34 @@ function renderTareasServidor() {
           <option value="en_progreso" ${t.estado === 'en_progreso' ? 'selected' : ''}>En progreso</option>
           <option value="hecha" ${t.estado === 'hecha' ? 'selected' : ''}>Hecha</option>
         </select>
+        <button class="action-secondary" data-action="edit-tarea-servidor" data-id="${t.id}">Editar</button>
         <button class="action-danger" data-action="del-tarea-servidor" data-id="${t.id}">Eliminar</button>
       </div>
-    </li>`
-    )
+    </li>`;
+    })
     .join('');
+}
+
+function startEditTareaServidor(tarea) {
+  const form = document.getElementById('form-tarea-servidor');
+  form.elements['id'].value = tarea.id;
+  form.elements['categoria_id'].value = tarea.categoria_id;
+  form.elements['titulo'].value = tarea.titulo;
+  form.elements['descripcion'].value = tarea.descripcion || '';
+  form.elements['fecha_limite'].value = toDatetimeLocalValue(tarea.fecha_limite);
+  form.elements['prioridad'].value = tarea.prioridad;
+  form.elements['opcional'].value = tarea.opcional ? '1' : '0';
+  document.getElementById('btn-tarea-servidor-submit').textContent = 'Guardar cambios';
+  document.getElementById('btn-tarea-servidor-cancelar').hidden = false;
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelEditTareaServidor() {
+  const form = document.getElementById('form-tarea-servidor');
+  form.reset();
+  form.elements['id'].value = '';
+  document.getElementById('btn-tarea-servidor-submit').textContent = 'Añadir';
+  document.getElementById('btn-tarea-servidor-cancelar').hidden = true;
 }
 
 async function renderDashboard() {
@@ -287,16 +326,21 @@ function initForms() {
   document.getElementById('form-tarea-servidor').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    await api('/api/tareas-servidor', {
-      method: 'POST',
-      body: JSON.stringify({
-        categoria_id: Number(fd.get('categoria_id')),
-        titulo: fd.get('titulo'),
-        descripcion: fd.get('descripcion'),
-        prioridad: fd.get('prioridad'),
-      }),
-    });
-    e.target.reset();
+    const id = fd.get('id');
+    const payload = {
+      categoria_id: Number(fd.get('categoria_id')),
+      titulo: fd.get('titulo'),
+      descripcion: fd.get('descripcion'),
+      prioridad: fd.get('prioridad'),
+      opcional: fd.get('opcional') === '1',
+      fecha_limite: fd.get('fecha_limite') ? new Date(fd.get('fecha_limite')).toISOString() : null,
+    };
+    if (id) {
+      await api(`/api/tareas-servidor/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    } else {
+      await api('/api/tareas-servidor', { method: 'POST', body: JSON.stringify(payload) });
+    }
+    cancelEditTareaServidor();
     await loadAll();
   });
 }
@@ -321,6 +365,11 @@ function initListActions() {
     } else if (action === 'del-tarea-servidor') {
       await api(`/api/tareas-servidor/${id}`, { method: 'DELETE' });
       await loadAll();
+    } else if (action === 'edit-tarea-servidor') {
+      const tarea = state.tareasServidor.find((t) => t.id === Number(id));
+      if (tarea) startEditTareaServidor(tarea);
+    } else if (action === 'cancelar-tarea-servidor') {
+      cancelEditTareaServidor();
     }
   });
 
