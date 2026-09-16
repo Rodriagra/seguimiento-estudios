@@ -13,10 +13,10 @@ services:
     environment:
       - PORT=3000
       - DB_PATH=/app/data/estudios.db
-      # Si el volumen en el host pertenece a otro usuario (PUID/PGID 568 típico de TrueNAS SCALE),
-      # asegúrate de que /mnt/tank/appdata/seguimiento-estudios sea propiedad de ese uid/gid,
-      # o fija aquí el usuario del contenedor:
-      user: "568:568"
+    # Si el volumen en el host pertenece a otro usuario (PUID/PGID 568 típico de TrueNAS SCALE),
+    # asegúrate de que /mnt/tank/appdata/seguimiento-estudios sea propiedad de ese uid/gid,
+    # o fija aquí el usuario del contenedor:
+    user: "568:568"
     networks:
       - homelab-net
     labels:
@@ -24,9 +24,24 @@ services:
       - com.centurylinklabs.watchtower.enable=true
       # Traefik (ejemplo, ajusta el host a tu convención local, sin Let's Encrypt)
       - traefik.enable=true
+      - traefik.http.services.estudios.loadbalancer.server.port=3000
+
+      # Router específico para index.html y sw.js: sin caché, para que el navegador
+      # siempre revalide contra el archivo más reciente del servidor (evita quedarse
+      # con una versión vieja de la PWA cacheada indefinidamente). Tiene prioridad
+      # más alta que el router general de abajo, así que se evalúa primero.
+      - traefik.http.routers.estudios-nocache.rule=Host(`estudios.local`) && (Path(`/`) || Path(`/index.html`) || Path(`/sw.js`))
+      - traefik.http.routers.estudios-nocache.entrypoints=web
+      - traefik.http.routers.estudios-nocache.service=estudios
+      - traefik.http.routers.estudios-nocache.priority=10
+      - traefik.http.routers.estudios-nocache.middlewares=estudios-nocache-headers
+      - traefik.http.middlewares.estudios-nocache-headers.headers.customresponseheaders.Cache-Control=no-cache
+
+      # Router general para el resto de rutas (API, estilos, script de la app, etc.)
       - traefik.http.routers.estudios.rule=Host(`estudios.local`)
       - traefik.http.routers.estudios.entrypoints=web
-      - traefik.http.services.estudios.loadbalancer.server.port=3000
+      - traefik.http.routers.estudios.service=estudios
+      - traefik.http.routers.estudios.priority=1
 
 networks:
   homelab-net:

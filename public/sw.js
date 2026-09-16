@@ -1,4 +1,4 @@
-const CACHE_NAME = 'seguimiento-estudios-v1';
+const CACHE_NAME = 'seguimiento-estudios-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
