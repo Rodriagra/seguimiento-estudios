@@ -1,4 +1,4 @@
-const state = { asignaturas: [], examenes: [], tareas: [] };
+const state = { asignaturas: [], examenes: [], tareas: [], categoriasServidor: [], tareasServidor: [] };
 
 const fmtDate = (iso) =>
   new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -18,10 +18,34 @@ async function api(path, options = {}) {
 function initTabs() {
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+      const nav = btn.closest('nav');
+      nav.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
-      document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+      const panel = document.getElementById(`tab-${btn.dataset.tab}`);
+      panel.parentElement.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+      panel.classList.add('active');
+    });
+  });
+}
+
+const APP_TITLES = {
+  estudios: '📚 Seguimiento Estudios',
+  servidor: '🖥️ Tareas del Servidor',
+};
+
+function initAppSwitch() {
+  document.querySelectorAll('.app-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const app = btn.dataset.app;
+      document.querySelectorAll('.app-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('[data-app-tabs]').forEach((nav) => {
+        nav.hidden = nav.dataset.appTabs !== app;
+      });
+      document.querySelectorAll('[data-app-panel]').forEach((panel) => {
+        panel.hidden = panel.dataset.appPanel !== app;
+      });
+      document.getElementById('app-title').textContent = APP_TITLES[app];
     });
   });
 }
@@ -30,6 +54,14 @@ function fillAsignaturaSelects() {
   document.querySelectorAll('select[name="asignatura_id"]').forEach((select) => {
     select.innerHTML = state.asignaturas
       .map((a) => `<option value="${a.id}">${a.nombre}</option>`)
+      .join('');
+  });
+}
+
+function fillCategoriaServidorSelects() {
+  document.querySelectorAll('select[name="categoria_id"]').forEach((select) => {
+    select.innerHTML = state.categoriasServidor
+      .map((c) => `<option value="${c.id}">${c.nombre}</option>`)
       .join('');
   });
 }
@@ -104,6 +136,54 @@ function renderTareas() {
     .join('');
 }
 
+function renderCategoriasServidor() {
+  const ul = document.getElementById('lista-categorias-servidor');
+  if (state.categoriasServidor.length === 0) {
+    ul.innerHTML = '<li class="empty-hint">No hay categorías todavía.</li>';
+    return;
+  }
+  ul.innerHTML = state.categoriasServidor
+    .map(
+      (c) => `
+    <li>
+      <div class="item-main">
+        <span class="tag" style="background:${c.color}">${c.nombre}</span>
+      </div>
+      <div class="item-actions">
+        <button class="action-danger" data-action="del-categoria-servidor" data-id="${c.id}">Eliminar</button>
+      </div>
+    </li>`
+    )
+    .join('');
+}
+
+function renderTareasServidor() {
+  const ul = document.getElementById('lista-tareas-servidor');
+  if (state.tareasServidor.length === 0) {
+    ul.innerHTML = '<li class="empty-hint">No hay tareas todavía.</li>';
+    return;
+  }
+  ul.innerHTML = state.tareasServidor
+    .map(
+      (t) => `
+    <li style="border-left-color:${t.categoria_color}">
+      <div class="item-main">
+        <span class="item-title">${t.titulo}</span>
+        <span class="item-meta">${t.categoria_nombre} · prioridad ${t.prioridad}${t.descripcion ? ' · ' + t.descripcion : ''}</span>
+      </div>
+      <div class="item-actions">
+        <select data-action="estado-tarea-servidor" data-id="${t.id}">
+          <option value="pendiente" ${t.estado === 'pendiente' ? 'selected' : ''}>Pendiente</option>
+          <option value="en_progreso" ${t.estado === 'en_progreso' ? 'selected' : ''}>En progreso</option>
+          <option value="hecha" ${t.estado === 'hecha' ? 'selected' : ''}>Hecha</option>
+        </select>
+        <button class="action-danger" data-action="del-tarea-servidor" data-id="${t.id}">Eliminar</button>
+      </div>
+    </li>`
+    )
+    .join('');
+}
+
 async function renderDashboard() {
   const data = await api('/api/dashboard');
   const examenesUl = document.getElementById('dashboard-examenes');
@@ -128,18 +208,25 @@ async function renderDashboard() {
 }
 
 async function loadAll() {
-  const [asignaturas, examenes, tareas] = await Promise.all([
+  const [asignaturas, examenes, tareas, categoriasServidor, tareasServidor] = await Promise.all([
     api('/api/asignaturas'),
     api('/api/examenes'),
     api('/api/tareas'),
+    api('/api/categorias-servidor'),
+    api('/api/tareas-servidor'),
   ]);
   state.asignaturas = asignaturas;
   state.examenes = examenes;
   state.tareas = tareas;
+  state.categoriasServidor = categoriasServidor;
+  state.tareasServidor = tareasServidor;
   fillAsignaturaSelects();
+  fillCategoriaServidorSelects();
   renderAsignaturas();
   renderExamenes();
   renderTareas();
+  renderCategoriasServidor();
+  renderTareasServidor();
   await renderDashboard();
 }
 
@@ -185,6 +272,33 @@ function initForms() {
     e.target.reset();
     await loadAll();
   });
+
+  document.getElementById('form-categoria-servidor').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await api('/api/categorias-servidor', {
+      method: 'POST',
+      body: JSON.stringify({ nombre: fd.get('nombre'), color: fd.get('color') }),
+    });
+    e.target.reset();
+    await loadAll();
+  });
+
+  document.getElementById('form-tarea-servidor').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    await api('/api/tareas-servidor', {
+      method: 'POST',
+      body: JSON.stringify({
+        categoria_id: Number(fd.get('categoria_id')),
+        titulo: fd.get('titulo'),
+        descripcion: fd.get('descripcion'),
+        prioridad: fd.get('prioridad'),
+      }),
+    });
+    e.target.reset();
+    await loadAll();
+  });
 }
 
 function initListActions() {
@@ -201,13 +315,20 @@ function initListActions() {
     } else if (action === 'del-tarea') {
       await api(`/api/tareas/${id}`, { method: 'DELETE' });
       await loadAll();
+    } else if (action === 'del-categoria-servidor' && confirm('¿Eliminar categoría y sus tareas asociadas?')) {
+      await api(`/api/categorias-servidor/${id}`, { method: 'DELETE' });
+      await loadAll();
+    } else if (action === 'del-tarea-servidor') {
+      await api(`/api/tareas-servidor/${id}`, { method: 'DELETE' });
+      await loadAll();
     }
   });
 
   document.body.addEventListener('change', async (e) => {
-    const select = e.target.closest('select[data-action="estado-tarea"]');
+    const select = e.target.closest('select[data-action="estado-tarea"], select[data-action="estado-tarea-servidor"]');
     if (!select) return;
-    await api(`/api/tareas/${select.dataset.id}`, {
+    const endpoint = select.dataset.action === 'estado-tarea-servidor' ? 'tareas-servidor' : 'tareas';
+    await api(`/api/${endpoint}/${select.dataset.id}`, {
       method: 'PUT',
       body: JSON.stringify({ estado: select.value }),
     });
@@ -233,6 +354,7 @@ if ('serviceWorker' in navigator) {
 }
 
 initTabs();
+initAppSwitch();
 initForms();
 initListActions();
 initIcsHint();

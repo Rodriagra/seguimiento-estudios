@@ -33,6 +33,22 @@ db.exec(`
     estado TEXT NOT NULL DEFAULT 'pendiente',
     prioridad TEXT NOT NULL DEFAULT 'media'
   );
+
+  CREATE TABLE IF NOT EXISTS categorias_servidor (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL UNIQUE,
+    color TEXT NOT NULL DEFAULT '#0ea5e9'
+  );
+
+  CREATE TABLE IF NOT EXISTS tareas_servidor (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    categoria_id INTEGER NOT NULL REFERENCES categorias_servidor(id) ON DELETE CASCADE,
+    titulo TEXT NOT NULL,
+    descripcion TEXT NOT NULL DEFAULT '',
+    estado TEXT NOT NULL DEFAULT 'pendiente',
+    prioridad TEXT NOT NULL DEFAULT 'media',
+    creado_en TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 const ASIGNATURAS_INICIALES = [

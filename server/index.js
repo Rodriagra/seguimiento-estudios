@@ -6,6 +6,8 @@ import { buildCalendarFeed } from './ics.js';
 import { router as asignaturasRouter } from './routes/asignaturas.js';
 import { router as examenesRouter } from './routes/examenes.js';
 import { router as tareasRouter } from './routes/tareas.js';
+import { router as categoriasServidorRouter } from './routes/categoriasServidor.js';
+import { router as tareasServidorRouter } from './routes/tareasServidor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = join(__dirname, '..', 'public');
@@ -17,6 +19,8 @@ app.use(express.json());
 app.use('/api/asignaturas', asignaturasRouter);
 app.use('/api/examenes', examenesRouter);
 app.use('/api/tareas', tareasRouter);
+app.use('/api/categorias-servidor', categoriasServidorRouter);
+app.use('/api/tareas-servidor', tareasServidorRouter);
 
 app.get('/api/dashboard', (req, res) => {
   const ahora = new Date().toISOString();
