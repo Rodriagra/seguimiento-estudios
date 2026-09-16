@@ -12,35 +12,39 @@
 </head>
 <body>
   <header class="topbar">
-    <h1 id="app-title">📚 Seguimiento Estudios</h1>
+    <h1 id="app-title">🏠 Dashboard</h1>
     <nav class="app-switch">
-      <button class="app-btn active" data-app="estudios">📚 Estudios</button>
+      <button class="app-btn active" data-app="dashboard">🏠 Dashboard</button>
+      <button class="app-btn" data-app="estudios">📚 Estudios</button>
       <button class="app-btn" data-app="servidor">🖥️ Servidor</button>
     </nav>
-    <nav class="tabs" data-app-tabs="estudios">
-      <button class="tab-btn active" data-tab="dashboard">Dashboard</button>
+    <nav class="tabs" data-app-tabs="estudios" hidden>
+      <button class="tab-btn active" data-tab="tareas">Tareas</button>
       <button class="tab-btn" data-tab="asignaturas">Asignaturas</button>
       <button class="tab-btn" data-tab="examenes">Exámenes</button>
-      <button class="tab-btn" data-tab="tareas">Tareas</button>
     </nav>
     <nav class="tabs" data-app-tabs="servidor" hidden>
-      <button class="tab-btn active" data-tab="servidor-categorias">Categorías</button>
-      <button class="tab-btn" data-tab="servidor-tareas">Tareas</button>
+      <button class="tab-btn active" data-tab="servidor-tareas">Tareas</button>
+      <button class="tab-btn" data-tab="servidor-categorias">Categorías</button>
     </nav>
   </header>
 
   <main>
-    <div data-app-panel="estudios">
-      <section id="tab-dashboard" class="tab-panel active">
-        <h2>Próximos eventos</h2>
+    <div data-app-panel="dashboard">
+      <section id="panel-dashboard" class="tab-panel active">
+        <h2>Panorama general</h2>
         <div class="cards-grid">
           <div class="card">
             <h3>Exámenes próximos</h3>
             <ul id="dashboard-examenes" class="event-list"></ul>
           </div>
           <div class="card">
-            <h3>Tareas pendientes</h3>
-            <ul id="dashboard-tareas" class="event-list"></ul>
+            <h3>Tareas pendientes · Estudios</h3>
+            <ul id="dashboard-tareas-estudios" class="event-list"></ul>
+          </div>
+          <div class="card">
+            <h3>Tareas pendientes · Servidor</h3>
+            <ul id="dashboard-tareas-servidor" class="event-list"></ul>
           </div>
         </div>
         <p class="calendar-hint">
@@ -48,6 +52,30 @@
           <code id="ics-url"></code>
           <button id="copy-ics" type="button">Copiar</button>
         </p>
+      </section>
+    </div>
+
+    <div data-app-panel="estudios" hidden>
+      <section id="tab-tareas" class="tab-panel active">
+        <h2>Tareas</h2>
+        <form id="form-tarea" class="inline-form">
+          <input type="hidden" name="id" value="" />
+          <select name="asignatura_id" required></select>
+          <input type="text" name="titulo" placeholder="Título de la tarea" required />
+          <input type="datetime-local" name="fecha_limite" />
+          <select name="prioridad">
+            <option value="alta">Alta</option>
+            <option value="media" selected>Media</option>
+            <option value="baja">Baja</option>
+          </select>
+          <select name="opcional">
+            <option value="0" selected>Obligatoria</option>
+            <option value="1">Opcional</option>
+          </select>
+          <button type="submit" id="btn-tarea-submit">Añadir</button>
+          <button type="button" id="btn-tarea-cancelar" class="action-secondary" data-action="cancelar-tarea" hidden>Cancelar</button>
+        </form>
+        <ul id="lista-tareas" class="item-list"></ul>
       </section>
 
       <section id="tab-asignaturas" class="tab-panel">
@@ -70,42 +98,10 @@
         </form>
         <ul id="lista-examenes" class="item-list"></ul>
       </section>
-
-      <section id="tab-tareas" class="tab-panel">
-        <h2>Tareas</h2>
-        <form id="form-tarea" class="inline-form">
-          <input type="hidden" name="id" value="" />
-          <select name="asignatura_id" required></select>
-          <input type="text" name="titulo" placeholder="Título de la tarea" required />
-          <input type="datetime-local" name="fecha_limite" />
-          <select name="prioridad">
-            <option value="alta">Alta</option>
-            <option value="media" selected>Media</option>
-            <option value="baja">Baja</option>
-          </select>
-          <select name="opcional">
-            <option value="0" selected>Obligatoria</option>
-            <option value="1">Opcional</option>
-          </select>
-          <button type="submit" id="btn-tarea-submit">Añadir</button>
-          <button type="button" id="btn-tarea-cancelar" class="action-secondary" data-action="cancelar-tarea" hidden>Cancelar</button>
-        </form>
-        <ul id="lista-tareas" class="item-list"></ul>
-      </section>
     </div>
 
     <div data-app-panel="servidor" hidden>
-      <section id="tab-servidor-categorias" class="tab-panel active">
-        <h2>Categorías</h2>
-        <form id="form-categoria-servidor" class="inline-form">
-          <input type="text" name="nombre" placeholder="Nombre de la categoría" required />
-          <input type="color" name="color" value="#0ea5e9" />
-          <button type="submit">Añadir</button>
-        </form>
-        <ul id="lista-categorias-servidor" class="item-list"></ul>
-      </section>
-
-      <section id="tab-servidor-tareas" class="tab-panel">
+      <section id="tab-servidor-tareas" class="tab-panel active">
         <h2>Tareas del servidor</h2>
         <form id="form-tarea-servidor" class="inline-form">
           <input type="hidden" name="id" value="" />
@@ -121,6 +117,16 @@
           <button type="button" id="btn-tarea-servidor-cancelar" class="action-secondary" data-action="cancelar-tarea-servidor" hidden>Cancelar</button>
         </form>
         <ul id="lista-tareas-servidor" class="item-list"></ul>
+      </section>
+
+      <section id="tab-servidor-categorias" class="tab-panel">
+        <h2>Categorías</h2>
+        <form id="form-categoria-servidor" class="inline-form">
+          <input type="text" name="nombre" placeholder="Nombre de la categoría" required />
+          <input type="color" name="color" value="#0ea5e9" />
+          <button type="submit">Añadir</button>
+        </form>
+        <ul id="lista-categorias-servidor" class="item-list"></ul>
       </section>
     </div>
   </main>

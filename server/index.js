@@ -31,14 +31,21 @@ app.get('/api/dashboard', (req, res) => {
        WHERE fecha >= ? ORDER BY fecha ASC LIMIT 10`
     )
     .all(ahora);
-  const tareas = db
+  const tareasEstudios = db
     .prepare(
       `SELECT tareas.*, asignaturas.nombre AS asignatura_nombre, asignaturas.color AS asignatura_color
        FROM tareas JOIN asignaturas ON asignaturas.id = tareas.asignatura_id
        WHERE estado != 'hecha' AND fecha_limite IS NOT NULL ORDER BY fecha_limite ASC LIMIT 10`
     )
     .all();
-  res.json({ examenes, tareas });
+  const tareasServidor = db
+    .prepare(
+      `SELECT tareas_servidor.*, categorias_servidor.nombre AS categoria_nombre, categorias_servidor.color AS categoria_color
+       FROM tareas_servidor JOIN categorias_servidor ON categorias_servidor.id = tareas_servidor.categoria_id
+       WHERE estado != 'hecha' ORDER BY tareas_servidor.creado_en DESC LIMIT 10`
+    )
+    .all();
+  res.json({ examenes, tareasEstudios, tareasServidor });
 });
 
 app.get('/calendar.ics', (req, res) => {

@@ -73,6 +73,10 @@ body {
   overflow-x: auto;
 }
 
+.tabs[hidden] {
+  display: none;
+}
+
 .tab-btn {
   background: rgba(255, 255, 255, 0.15);
   border: none;
@@ -138,6 +142,15 @@ h2 { margin-top: 0; }
 
 .item-list li {
   justify-content: space-between;
+}
+
+.event-list li[data-goto-app] {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.event-list li[data-goto-app]:hover {
+  background: var(--border);
 }
 
 .item-main { display: flex; flex-direction: column; gap: 0.15rem; }

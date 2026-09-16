@@ -22,38 +22,57 @@ async function api(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-function initTabs() {
-  document.querySelectorAll('.tab-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const nav = btn.closest('nav');
-      nav.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      const panel = document.getElementById(`tab-${btn.dataset.tab}`);
-      panel.parentElement.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
-      panel.classList.add('active');
-    });
-  });
-}
-
 const APP_TITLES = {
+  dashboard: '🏠 Dashboard',
   estudios: '📚 Seguimiento Estudios',
   servidor: '🖥️ Tareas del Servidor',
 };
 
+function switchApp(app) {
+  document.querySelectorAll('.app-btn').forEach((b) => b.classList.toggle('active', b.dataset.app === app));
+  document.querySelectorAll('[data-app-tabs]').forEach((nav) => {
+    nav.hidden = nav.dataset.appTabs !== app;
+  });
+  document.querySelectorAll('[data-app-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.appPanel !== app;
+  });
+  document.getElementById('app-title').textContent = APP_TITLES[app];
+}
+
+function switchTab(tab) {
+  const panel = document.getElementById(`tab-${tab}`);
+  if (!panel) return;
+  const container = panel.closest('[data-app-panel]');
+  container.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+  panel.classList.add('active');
+  const nav = document.querySelector(`nav[data-app-tabs="${container.dataset.appPanel}"]`);
+  if (nav) {
+    nav.querySelectorAll('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  }
+}
+
+function goTo(app, tab) {
+  switchApp(app);
+  if (tab) switchTab(tab);
+}
+
+function initTabs() {
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+  });
+}
+
 function initAppSwitch() {
   document.querySelectorAll('.app-btn').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const app = btn.dataset.app;
-      document.querySelectorAll('.app-btn').forEach((b) => b.classList.remove('active'));
-      btn.classList.add('active');
-      document.querySelectorAll('[data-app-tabs]').forEach((nav) => {
-        nav.hidden = nav.dataset.appTabs !== app;
-      });
-      document.querySelectorAll('[data-app-panel]').forEach((panel) => {
-        panel.hidden = panel.dataset.appPanel !== app;
-      });
-      document.getElementById('app-title').textContent = APP_TITLES[app];
-    });
+    btn.addEventListener('click', () => switchApp(btn.dataset.app));
+  });
+}
+
+function initDashboardLinks() {
+  document.body.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-goto-app]');
+    if (!item) return;
+    goTo(item.dataset.gotoApp, item.dataset.gotoTab);
   });
 }
 
@@ -248,17 +267,36 @@ async function renderDashboard() {
       ? '<li class="empty-hint">Sin exámenes próximos.</li>'
       : data.examenes
           .map(
-            (e) => `<li style="border-left-color:${e.asignatura_color}">${e.asignatura_nombre} · ${fmtDate(e.fecha)}</li>`
+            (e) => `
+    <li style="border-left-color:${e.asignatura_color}" data-goto-app="estudios" data-goto-tab="examenes">
+      ${e.asignatura_nombre} · ${fmtDate(e.fecha)}
+    </li>`
           )
           .join('');
 
-  const tareasUl = document.getElementById('dashboard-tareas');
-  tareasUl.innerHTML =
-    data.tareas.length === 0
+  const tareasEstudiosUl = document.getElementById('dashboard-tareas-estudios');
+  tareasEstudiosUl.innerHTML =
+    data.tareasEstudios.length === 0
       ? '<li class="empty-hint">Sin tareas pendientes.</li>'
-      : data.tareas
+      : data.tareasEstudios
           .map(
-            (t) => `<li style="border-left-color:${t.asignatura_color}">${t.titulo} · ${fmtDate(t.fecha_limite)}</li>`
+            (t) => `
+    <li style="border-left-color:${t.asignatura_color}" data-goto-app="estudios" data-goto-tab="tareas">
+      ${t.titulo} · ${fmtDate(t.fecha_limite)}
+    </li>`
+          )
+          .join('');
+
+  const tareasServidorUl = document.getElementById('dashboard-tareas-servidor');
+  tareasServidorUl.innerHTML =
+    data.tareasServidor.length === 0
+      ? '<li class="empty-hint">Sin tareas pendientes.</li>'
+      : data.tareasServidor
+          .map(
+            (t) => `
+    <li style="border-left-color:${t.categoria_color}" data-goto-app="servidor" data-goto-tab="servidor-tareas">
+      ${t.titulo} · ${t.categoria_nombre}
+    </li>`
           )
           .join('');
 }
@@ -428,6 +466,7 @@ if ('serviceWorker' in navigator) {
 
 initTabs();
 initAppSwitch();
+initDashboardLinks();
 initForms();
 initListActions();
 initIcsHint();
