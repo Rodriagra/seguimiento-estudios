@@ -6,6 +6,7 @@ const state = {
   categoriasServidor: [],
   tareasServidor: [],
   abiertas: new Set(),
+  calMes: { y: new Date().getFullYear(), m: new Date().getMonth() },
 };
 
 const fmtDate = (iso) =>
@@ -222,7 +223,9 @@ function startEditTarea(tarea) {
   form.elements['id'].value = tarea.id;
   form.elements['asignatura_id'].value = tarea.asignatura_id;
   form.elements['titulo'].value = tarea.titulo;
-  form.elements['fecha_limite'].value = toDatetimeLocalValue(tarea.fecha_limite);
+  const [fecha, hora] = toDatetimeLocalValue(tarea.fecha_limite).split('T');
+  form.elements['fecha_limite'].value = fecha || '';
+  form.elements['hora_limite'].value = hora || '00:00';
   form.elements['prioridad'].value = tarea.prioridad;
   form.elements['opcional'].value = tarea.opcional ? '1' : '0';
   document.getElementById('btn-tarea-submit').textContent = 'Guardar cambios';
@@ -307,7 +310,47 @@ function cancelEditTareaServidor() {
   document.getElementById('btn-tarea-servidor-cancelar').hidden = true;
 }
 
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const DIAS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
+
+function renderCalendario() {
+  const el = document.getElementById('dashboard-calendario');
+  const { y, m } = state.calMes;
+  const hoy = new Date();
+  const primerDia = (new Date(y, m, 1).getDay() + 6) % 7; // lunes = 0
+  const diasMes = new Date(y, m + 1, 0).getDate();
+
+  const porDia = {};
+  for (const e of state.examenes) {
+    const d = new Date(e.fecha);
+    if (d.getFullYear() === y && d.getMonth() === m) (porDia[d.getDate()] ||= []).push(e);
+  }
+
+  let celdas = '';
+  for (let i = 0; i < primerDia; i++) celdas += '<span class="cal-day empty"></span>';
+  for (let d = 1; d <= diasMes; d++) {
+    const exs = porDia[d] || [];
+    const esHoy = d === hoy.getDate() && m === hoy.getMonth() && y === hoy.getFullYear();
+    const dots = exs.map((e) => `<i style="background:${e.asignatura_color}"></i>`).join('');
+    const title = exs.map((e) => e.asignatura_nombre).join(', ');
+    celdas += `<span class="cal-day${esHoy ? ' today' : ''}${exs.length ? ' has-exam' : ''}" ${title ? `title="${title}"` : ''}>
+      <b>${d}</b><span class="cal-dots">${dots}</span></span>`;
+  }
+
+  el.innerHTML = `
+    <div class="cal-head">
+      <button type="button" data-action="cal-prev" aria-label="Mes anterior">‹</button>
+      <strong>${MESES[m]} ${y}</strong>
+      <button type="button" data-action="cal-next" aria-label="Mes siguiente">›</button>
+    </div>
+    <div class="cal-grid">
+      ${DIAS.map((d) => `<span class="cal-dow">${d}</span>`).join('')}
+      ${celdas}
+    </div>`;
+}
+
 async function renderDashboard() {
+  renderCalendario();
   const data = await api('/api/dashboard');
   const examenesUl = document.getElementById('dashboard-examenes');
   examenesUl.innerHTML =
@@ -408,7 +451,9 @@ function initForms() {
     const payload = {
       asignatura_id: Number(fd.get('asignatura_id')),
       titulo: fd.get('titulo'),
-      fecha_limite: fd.get('fecha_limite') ? new Date(fd.get('fecha_limite')).toISOString() : null,
+      fecha_limite: fd.get('fecha_limite')
+        ? new Date(`${fd.get('fecha_limite')}T${fd.get('hora_limite') || '00:00'}`).toISOString()
+        : null,
       prioridad: fd.get('prioridad'),
       opcional: fd.get('opcional') === '1',
     };
@@ -474,6 +519,10 @@ function initListActions() {
       if (!confirm('¿Eliminar asignatura y sus exámenes/tareas/temas asociados?')) return;
       await api(`/api/asignaturas/${id}`, { method: 'DELETE' });
       await loadAll();
+    } else if (action === 'cal-prev' || action === 'cal-next') {
+      const d = new Date(state.calMes.y, state.calMes.m + (action === 'cal-next' ? 1 : -1), 1);
+      state.calMes = { y: d.getFullYear(), m: d.getMonth() };
+      renderCalendario();
     } else if (action === 'del-tema') {
       await api(`/api/temas/${id}`, { method: 'DELETE' });
       await loadAll();
