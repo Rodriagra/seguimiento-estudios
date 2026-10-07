@@ -6,6 +6,7 @@ import { buildCalendarFeed } from './ics.js';
 import { router as asignaturasRouter } from './routes/asignaturas.js';
 import { router as examenesRouter } from './routes/examenes.js';
 import { router as tareasRouter } from './routes/tareas.js';
+import { router as temasRouter } from './routes/temas.js';
 import { router as categoriasServidorRouter } from './routes/categoriasServidor.js';
 import { router as tareasServidorRouter } from './routes/tareasServidor.js';
 
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use('/api/asignaturas', asignaturasRouter);
 app.use('/api/examenes', examenesRouter);
 app.use('/api/tareas', tareasRouter);
+app.use('/api/temas', temasRouter);
 app.use('/api/categorias-servidor', categoriasServidorRouter);
 app.use('/api/tareas-servidor', tareasServidorRouter);
 

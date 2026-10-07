@@ -35,6 +35,13 @@ db.exec(`
     opcional INTEGER NOT NULL DEFAULT 0
   );
 
+  CREATE TABLE IF NOT EXISTS temas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asignatura_id INTEGER NOT NULL REFERENCES asignaturas(id) ON DELETE CASCADE,
+    titulo TEXT NOT NULL,
+    completado INTEGER NOT NULL DEFAULT 0
+  );
+
   CREATE TABLE IF NOT EXISTS categorias_servidor (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL UNIQUE,

@@ -1,4 +1,12 @@
-const state = { asignaturas: [], examenes: [], tareas: [], categoriasServidor: [], tareasServidor: [] };
+const state = {
+  asignaturas: [],
+  examenes: [],
+  tareas: [],
+  temas: [],
+  categoriasServidor: [],
+  tareasServidor: [],
+  abiertas: new Set(),
+};
 
 const fmtDate = (iso) =>
   new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -99,17 +107,56 @@ function renderAsignaturas() {
     return;
   }
   ul.innerHTML = state.asignaturas
-    .map(
-      (a) => `
-    <li>
-      <div class="item-main">
-        <span class="tag" style="background:${a.color}">${a.nombre}</span>
-      </div>
-      <div class="item-actions">
-        <button class="action-danger" data-action="del-asignatura" data-id="${a.id}">Eliminar</button>
-      </div>
-    </li>`
-    )
+    .map((a) => {
+      const temas = state.temas.filter((t) => t.asignatura_id === a.id);
+      const hechos = temas.filter((t) => t.completado).length;
+      const completadas = state.tareas.filter((t) => t.asignatura_id === a.id && t.estado === 'hecha');
+      const temasHtml = temas.length
+        ? temas
+            .map(
+              (t) => `
+          <li class="tema ${t.completado ? 'done' : ''}">
+            <label>
+              <input type="checkbox" data-action="toggle-tema" data-id="${t.id}" ${t.completado ? 'checked' : ''} />
+              <span>${t.titulo}</span>
+            </label>
+            <button class="action-danger" data-action="del-tema" data-id="${t.id}">✕</button>
+          </li>`
+            )
+            .join('')
+        : '<li class="empty-hint">Sin temas todavía.</li>';
+      const completadasHtml = completadas.length
+        ? completadas
+            .map(
+              (t) => `
+          <li class="tema done">
+            <span>✔ ${t.titulo}${t.opcional ? ' <em>(opcional)</em>' : ''}</span>
+            <button class="action-secondary" data-action="reabrir-tarea" data-id="${t.id}">Reabrir</button>
+          </li>`
+            )
+            .join('')
+        : '<li class="empty-hint">Ninguna tarea completada.</li>';
+      return `
+    <li class="asignatura-item" style="border-left-color:${a.color}">
+      <details data-asignatura="${a.id}" ${state.abiertas.has(a.id) ? 'open' : ''}>
+        <summary>
+          <span class="tag" style="background:${a.color}">${a.nombre}</span>
+          <span class="item-meta">${hechos}/${temas.length} temas · ${completadas.length} tareas completadas</span>
+          <button class="action-danger" data-action="del-asignatura" data-id="${a.id}">Eliminar</button>
+        </summary>
+        <div class="asignatura-detalle">
+          <h4>Temas</h4>
+          <form class="inline-form form-tema" data-asignatura-id="${a.id}">
+            <input type="text" name="titulo" placeholder="Nuevo tema" required />
+            <button type="submit">Añadir tema</button>
+          </form>
+          <ul class="sub-list">${temasHtml}</ul>
+          <h4>Tareas completadas</h4>
+          <ul class="sub-list">${completadasHtml}</ul>
+        </div>
+      </details>
+    </li>`;
+    })
     .join('');
 }
 
@@ -137,11 +184,12 @@ function renderExamenes() {
 
 function renderTareas() {
   const ul = document.getElementById('lista-tareas');
-  if (state.tareas.length === 0) {
-    ul.innerHTML = '<li class="empty-hint">No hay tareas todavía.</li>';
+  const pendientes = state.tareas.filter((t) => t.estado !== 'hecha');
+  if (pendientes.length === 0) {
+    ul.innerHTML = '<li class="empty-hint">No hay tareas pendientes.</li>';
     return;
   }
-  ul.innerHTML = state.tareas
+  ul.innerHTML = pendientes
     .map((t) => {
       const meta = [
         t.asignatura_nombre,
@@ -302,16 +350,18 @@ async function renderDashboard() {
 }
 
 async function loadAll() {
-  const [asignaturas, examenes, tareas, categoriasServidor, tareasServidor] = await Promise.all([
+  const [asignaturas, examenes, tareas, temas, categoriasServidor, tareasServidor] = await Promise.all([
     api('/api/asignaturas'),
     api('/api/examenes'),
     api('/api/tareas'),
+    api('/api/temas'),
     api('/api/categorias-servidor'),
     api('/api/tareas-servidor'),
   ]);
   state.asignaturas = asignaturas;
   state.examenes = examenes;
   state.tareas = tareas;
+  state.temas = temas;
   state.categoriasServidor = categoriasServidor;
   state.tareasServidor = tareasServidor;
   fillAsignaturaSelects();
@@ -371,6 +421,18 @@ function initForms() {
     await loadAll();
   });
 
+  document.getElementById('lista-asignaturas').addEventListener('submit', async (e) => {
+    const form = e.target.closest('.form-tema');
+    if (!form) return;
+    e.preventDefault();
+    const fd = new FormData(form);
+    await api('/api/temas', {
+      method: 'POST',
+      body: JSON.stringify({ asignatura_id: Number(form.dataset.asignaturaId), titulo: fd.get('titulo') }),
+    });
+    await loadAll();
+  });
+
   document.getElementById('form-categoria-servidor').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -407,8 +469,16 @@ function initListActions() {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     const { action, id } = btn.dataset;
-    if (action === 'del-asignatura' && confirm('¿Eliminar asignatura y sus exámenes/tareas asociadas?')) {
+    if (action === 'del-asignatura') {
+      e.preventDefault(); // el botón está dentro de <summary>: no desplegar/plegar
+      if (!confirm('¿Eliminar asignatura y sus exámenes/tareas/temas asociados?')) return;
       await api(`/api/asignaturas/${id}`, { method: 'DELETE' });
+      await loadAll();
+    } else if (action === 'del-tema') {
+      await api(`/api/temas/${id}`, { method: 'DELETE' });
+      await loadAll();
+    } else if (action === 'reabrir-tarea') {
+      await api(`/api/tareas/${id}`, { method: 'PUT', body: JSON.stringify({ estado: 'pendiente' }) });
       await loadAll();
     } else if (action === 'del-examen') {
       await api(`/api/examenes/${id}`, { method: 'DELETE' });
@@ -435,7 +505,23 @@ function initListActions() {
     }
   });
 
+  document.body.addEventListener('toggle', (e) => {
+    const id = Number(e.target.dataset?.asignatura);
+    if (!id) return;
+    if (e.target.open) state.abiertas.add(id);
+    else state.abiertas.delete(id);
+  }, true);
+
   document.body.addEventListener('change', async (e) => {
+    const check = e.target.closest('input[data-action="toggle-tema"]');
+    if (check) {
+      await api(`/api/temas/${check.dataset.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({ completado: check.checked }),
+      });
+      await loadAll();
+      return;
+    }
     const select = e.target.closest('select[data-action="estado-tarea"], select[data-action="estado-tarea-servidor"]');
     if (!select) return;
     const endpoint = select.dataset.action === 'estado-tarea-servidor' ? 'tareas-servidor' : 'tareas';
