@@ -497,3 +497,13 @@ button.action-danger:hover { background: var(--danger); color: #fff; }
   main { padding-top: 1.5rem; }
   .item-list > li { flex-wrap: wrap; }
 }
+
+/* ---------- Tareas del servidor: dos columnas ---------- */
+
+.cards-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+@media (max-width: 760px) {
+  .cards-2 { grid-template-columns: 1fr; }
+}
+
+.card .item-list > li { flex-wrap: wrap; }

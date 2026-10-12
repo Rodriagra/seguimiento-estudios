@@ -90,6 +90,11 @@ if (tareasServidorCols.includes('fecha_limite')) {
   db.exec('ALTER TABLE tareas_servidor DROP COLUMN fecha_limite');
 }
 
+// Migración: las Tareas del Servidor se dividen en 'bug' y 'actualizacion' (las existentes pasan a actualizacion).
+if (!tareasServidorCols.includes('tipo')) {
+  db.exec("ALTER TABLE tareas_servidor ADD COLUMN tipo TEXT NOT NULL DEFAULT 'actualizacion'");
+}
+
 const ASIGNATURAS_INICIALES = [
   ['Inglés', '#0ea5e9'],
   ['Competencias Profesionales', '#8b5cf6'],

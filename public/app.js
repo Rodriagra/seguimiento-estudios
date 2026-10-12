@@ -263,14 +263,20 @@ function renderCategoriasServidor() {
 }
 
 function renderTareasServidor() {
-  const ul = document.getElementById('lista-tareas-servidor');
-  if (state.tareasServidor.length === 0) {
-    ul.innerHTML = '<li class="empty-hint">No hay tareas todavía.</li>';
-    return;
-  }
-  ul.innerHTML = state.tareasServidor
-    .map(
-      (t) => `
+  const render = (ulId, tareas, vacio) => {
+    const ul = document.getElementById(ulId);
+    ul.innerHTML = tareas.length ? tareas.map(tareaServidorHtml).join('') : `<li class="empty-hint">${vacio}</li>`;
+  };
+  render('lista-tareas-bugs', state.tareasServidor.filter((t) => t.tipo === 'bug'), 'Sin bugs. 🎉');
+  render(
+    'lista-tareas-actualizaciones',
+    state.tareasServidor.filter((t) => t.tipo !== 'bug'),
+    'Sin actualizaciones pendientes.'
+  );
+}
+
+function tareaServidorHtml(t) {
+  return `
     <li style="border-left-color:${t.categoria_color}">
       <div class="item-main">
         <span class="item-title">${t.titulo}</span>
@@ -285,14 +291,13 @@ function renderTareasServidor() {
         <button class="action-secondary" data-action="edit-tarea-servidor" data-id="${t.id}">Editar</button>
         <button class="action-danger" data-action="del-tarea-servidor" data-id="${t.id}">Eliminar</button>
       </div>
-    </li>`
-    )
-    .join('');
+    </li>`;
 }
 
 function startEditTareaServidor(tarea) {
   const form = document.getElementById('form-tarea-servidor');
   form.elements['id'].value = tarea.id;
+  form.elements['tipo'].value = tarea.tipo;
   form.elements['categoria_id'].value = tarea.categoria_id;
   form.elements['titulo'].value = tarea.titulo;
   form.elements['descripcion'].value = tarea.descripcion || '';
@@ -466,6 +471,12 @@ function initForms() {
     await loadAll();
   });
 
+  // Los bugs nacen con prioridad alta; las actualizaciones con media (solo al crear).
+  document.querySelector('#form-tarea-servidor select[name="tipo"]').addEventListener('change', (e) => {
+    const form = e.target.form;
+    if (!form.elements['id'].value) form.elements['prioridad'].value = e.target.value === 'bug' ? 'alta' : 'media';
+  });
+
   document.getElementById('lista-asignaturas').addEventListener('submit', async (e) => {
     const form = e.target.closest('.form-tema');
     if (!form) return;
@@ -494,6 +505,7 @@ function initForms() {
     const fd = new FormData(e.target);
     const id = fd.get('id');
     const payload = {
+      tipo: fd.get('tipo'),
       categoria_id: Number(fd.get('categoria_id')),
       titulo: fd.get('titulo'),
       descripcion: fd.get('descripcion'),

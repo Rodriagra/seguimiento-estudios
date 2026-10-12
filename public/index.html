@@ -107,6 +107,10 @@
         <h2>Tareas del servidor</h2>
         <form id="form-tarea-servidor" class="inline-form">
           <input type="hidden" name="id" value="" />
+          <select name="tipo" title="Tipo">
+            <option value="actualizacion" selected>🚀 Actualización</option>
+            <option value="bug">🐞 Bug</option>
+          </select>
           <select name="categoria_id" required></select>
           <input type="text" name="titulo" placeholder="Título de la tarea" required />
           <input type="text" name="descripcion" placeholder="Descripción (opcional)" />
@@ -118,7 +122,16 @@
           <button type="submit" id="btn-tarea-servidor-submit">Añadir</button>
           <button type="button" id="btn-tarea-servidor-cancelar" class="action-secondary" data-action="cancelar-tarea-servidor" hidden>Cancelar</button>
         </form>
-        <ul id="lista-tareas-servidor" class="item-list"></ul>
+        <div class="cards-grid cards-2">
+          <div class="card">
+            <h3>🐞 Bugs</h3>
+            <ul id="lista-tareas-bugs" class="item-list"></ul>
+          </div>
+          <div class="card">
+            <h3>🚀 Actualizaciones futuras</h3>
+            <ul id="lista-tareas-actualizaciones" class="item-list"></ul>
+          </div>
+        </div>
       </section>
 
       <section id="tab-servidor-categorias" class="tab-panel">
