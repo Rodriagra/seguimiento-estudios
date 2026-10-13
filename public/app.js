@@ -331,14 +331,27 @@ function renderCalendario() {
     if (d.getFullYear() === y && d.getMonth() === m) (porDia[d.getDate()] ||= []).push(e);
   }
 
+  const tareasPorDia = {};
+  for (const t of state.tareas) {
+    if (t.estado === 'hecha' || !t.fecha_limite) continue;
+    const d = new Date(t.fecha_limite);
+    if (d.getFullYear() === y && d.getMonth() === m) (tareasPorDia[d.getDate()] ||= []).push(t);
+  }
+
   let celdas = '';
   for (let i = 0; i < primerDia; i++) celdas += '<span class="cal-day empty"></span>';
   for (let d = 1; d <= diasMes; d++) {
     const exs = porDia[d] || [];
+    const tars = tareasPorDia[d] || [];
     const esHoy = d === hoy.getDate() && m === hoy.getMonth() && y === hoy.getFullYear();
-    const dots = exs.map((e) => `<i style="background:${e.asignatura_color}"></i>`).join('');
-    const title = exs.map((e) => e.asignatura_nombre).join(', ');
-    celdas += `<span class="cal-day${esHoy ? ' today' : ''}${exs.length ? ' has-exam' : ''}" ${title ? `title="${title}"` : ''}>
+    const dots =
+      exs.map((e) => `<i style="background:${e.asignatura_color}"></i>`).join('') +
+      tars.map((t) => `<i class="sq" style="background:${t.asignatura_color}"></i>`).join('');
+    const title = [
+      ...exs.map((e) => `Examen: ${e.asignatura_nombre}`),
+      ...tars.map((t) => `Entrega: ${t.titulo} (${t.asignatura_nombre})`),
+    ].join('\n');
+    celdas += `<span class="cal-day${esHoy ? ' today' : ''}${exs.length || tars.length ? ' has-exam' : ''}" ${title ? `title="${title}"` : ''}>
       <b>${d}</b><span class="cal-dots">${dots}</span></span>`;
   }
 
@@ -351,7 +364,8 @@ function renderCalendario() {
     <div class="cal-grid">
       ${DIAS.map((d) => `<span class="cal-dow">${d}</span>`).join('')}
       ${celdas}
-    </div>`;
+    </div>
+    <p class="cal-legend"><i></i> Examen <i class="sq"></i> Entrega de tarea</p>`;
 }
 
 async function renderDashboard() {

@@ -507,3 +507,18 @@ button.action-danger:hover { background: var(--danger); color: #fff; }
 }
 
 .card .item-list > li { flex-wrap: wrap; }
+
+/* ---------- Calendario: tareas (cuadrado) vs exámenes (círculo) ---------- */
+
+.cal-dots i.sq { border-radius: 2px; }
+
+.cal-legend {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.cal-legend i { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); display: inline-block; }
+.cal-legend i.sq { border-radius: 2px; margin-left: 0.6rem; }
