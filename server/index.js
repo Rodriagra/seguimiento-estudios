@@ -44,7 +44,7 @@ app.get('/api/dashboard', (req, res) => {
     .prepare(
       `SELECT tareas_servidor.*, categorias_servidor.nombre AS categoria_nombre, categorias_servidor.color AS categoria_color
        FROM tareas_servidor JOIN categorias_servidor ON categorias_servidor.id = tareas_servidor.categoria_id
-       WHERE estado != 'hecha' ORDER BY tareas_servidor.creado_en DESC LIMIT 10`
+       ORDER BY tareas_servidor.creado_en DESC LIMIT 10`
     )
     .all();
   res.json({ examenes, tareasEstudios, tareasServidor });

@@ -66,8 +66,8 @@
           <input type="date" name="fecha_limite" title="Fecha de entrega" />
           <input type="time" name="hora_limite" value="00:00" title="Hora de entrega" />
           <select name="prioridad">
-            <option value="alta">Alta</option>
-            <option value="media" selected>Media</option>
+            <option value="alta" selected>Alta</option>
+            <option value="media">Media</option>
             <option value="baja">Baja</option>
           </select>
           <select name="opcional">
@@ -77,7 +77,16 @@
           <button type="submit" id="btn-tarea-submit">Añadir</button>
           <button type="button" id="btn-tarea-cancelar" class="action-secondary" data-action="cancelar-tarea" hidden>Cancelar</button>
         </form>
-        <ul id="lista-tareas" class="item-list"></ul>
+        <div class="cards-grid cards-2">
+          <div class="card">
+            <h3>📌 Obligatorias</h3>
+            <ul id="lista-tareas-obligatorias" class="item-list"></ul>
+          </div>
+          <div class="card">
+            <h3>✨ Opcionales</h3>
+            <ul id="lista-tareas-opcionales" class="item-list"></ul>
+          </div>
+        </div>
       </section>
 
       <section id="tab-asignaturas" class="tab-panel">

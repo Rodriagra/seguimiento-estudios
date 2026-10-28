@@ -23,8 +23,8 @@ router.post('/', (req, res) => {
     return res.status(400).json({ error: 'asignatura_id y titulo son obligatorios' });
   }
   const estadoFinal = ESTADOS.includes(estado) ? estado : 'pendiente';
-  const prioridadFinal = PRIORIDADES.includes(prioridad) ? prioridad : 'media';
   const opcionalFinal = opcional ? 1 : 0;
+  const prioridadFinal = PRIORIDADES.includes(prioridad) ? prioridad : opcionalFinal ? 'media' : 'alta';
   const fechaFinal = fecha_limite || null;
   const info = db
     .prepare(

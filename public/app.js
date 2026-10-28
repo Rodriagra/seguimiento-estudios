@@ -184,21 +184,25 @@ function renderExamenes() {
 }
 
 function renderTareas() {
-  const ul = document.getElementById('lista-tareas');
-  const pendientes = state.tareas.filter((t) => t.estado !== 'hecha');
-  if (pendientes.length === 0) {
-    ul.innerHTML = '<li class="empty-hint">No hay tareas pendientes.</li>';
-    return;
-  }
-  ul.innerHTML = pendientes
-    .map((t) => {
-      const meta = [
-        t.asignatura_nombre,
-        t.fecha_limite ? fmtDate(t.fecha_limite) : 'sin fecha',
-        `prioridad ${t.prioridad}`,
-        t.opcional ? 'opcional' : 'obligatoria',
-      ].join(' · ');
-      return `
+  // Más urgentes arriba; las tareas sin fecha van al final de su columna.
+  const porFecha = (a, b) => {
+    if (!a.fecha_limite && !b.fecha_limite) return 0;
+    if (!a.fecha_limite) return 1;
+    if (!b.fecha_limite) return -1;
+    return new Date(a.fecha_limite) - new Date(b.fecha_limite);
+  };
+  const pendientes = state.tareas.filter((t) => t.estado !== 'hecha').sort(porFecha);
+  const render = (ulId, tareas, vacio) => {
+    const ul = document.getElementById(ulId);
+    ul.innerHTML = tareas.length ? tareas.map(tareaEstudiosHtml).join('') : `<li class="empty-hint">${vacio}</li>`;
+  };
+  render('lista-tareas-obligatorias', pendientes.filter((t) => !t.opcional), 'No hay tareas obligatorias pendientes.');
+  render('lista-tareas-opcionales', pendientes.filter((t) => t.opcional), 'No hay tareas opcionales pendientes.');
+}
+
+function tareaEstudiosHtml(t) {
+  const meta = [t.asignatura_nombre, t.fecha_limite ? fmtDate(t.fecha_limite) : 'sin fecha', `prioridad ${t.prioridad}`].join(' · ');
+  return `
     <li style="border-left-color:${t.asignatura_color}">
       <div class="item-main">
         <span class="item-title">${t.titulo}</span>
@@ -214,8 +218,6 @@ function renderTareas() {
         <button class="action-danger" data-action="del-tarea" data-id="${t.id}">Eliminar</button>
       </div>
     </li>`;
-    })
-    .join('');
 }
 
 function startEditTarea(tarea) {
@@ -283,11 +285,6 @@ function tareaServidorHtml(t) {
         <span class="item-meta">${t.categoria_nombre} · prioridad ${t.prioridad}${t.descripcion ? ' · ' + t.descripcion : ''}</span>
       </div>
       <div class="item-actions">
-        <select data-action="estado-tarea-servidor" data-id="${t.id}">
-          <option value="pendiente" ${t.estado === 'pendiente' ? 'selected' : ''}>Pendiente</option>
-          <option value="en_progreso" ${t.estado === 'en_progreso' ? 'selected' : ''}>En progreso</option>
-          <option value="hecha" ${t.estado === 'hecha' ? 'selected' : ''}>Hecha</option>
-        </select>
         <button class="action-secondary" data-action="edit-tarea-servidor" data-id="${t.id}">Editar</button>
         <button class="action-danger" data-action="del-tarea-servidor" data-id="${t.id}">Eliminar</button>
       </div>
@@ -485,6 +482,12 @@ function initForms() {
     await loadAll();
   });
 
+  // Las obligatorias nacen con prioridad alta; las opcionales con media (solo al crear).
+  document.querySelector('#form-tarea select[name="opcional"]').addEventListener('change', (e) => {
+    const form = e.target.form;
+    if (!form.elements['id'].value) form.elements['prioridad'].value = e.target.value === '1' ? 'media' : 'alta';
+  });
+
   // Los bugs nacen con prioridad alta; las actualizaciones con media (solo al crear).
   document.querySelector('#form-tarea-servidor select[name="tipo"]').addEventListener('change', (e) => {
     const form = e.target.form;
@@ -597,9 +600,9 @@ function initListActions() {
       await loadAll();
       return;
     }
-    const select = e.target.closest('select[data-action="estado-tarea"], select[data-action="estado-tarea-servidor"]');
+    const select = e.target.closest('select[data-action="estado-tarea"]');
     if (!select) return;
-    const endpoint = select.dataset.action === 'estado-tarea-servidor' ? 'tareas-servidor' : 'tareas';
+    const endpoint = 'tareas';
     await api(`/api/${endpoint}/${select.dataset.id}`, {
       method: 'PUT',
       body: JSON.stringify({ estado: select.value }),
