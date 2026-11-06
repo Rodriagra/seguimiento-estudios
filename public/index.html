@@ -3,154 +3,238 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Seguimiento Estudios</title>
-  <meta name="theme-color" content="#4f46e5" />
+  <title>Seguimiento de estudios</title>
+  <meta name="theme-color" content="#f2f4f7" />
   <link rel="manifest" href="manifest.json" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
   <link rel="icon" href="icons/icon-192.png" />
+  <link rel="preload" href="fonts/geist-latin.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="topbar">
-    <h1 id="app-title">🏠 Dashboard</h1>
-    <nav class="app-switch">
-      <button class="app-btn active" data-app="dashboard">🏠 Dashboard</button>
-      <button class="app-btn" data-app="estudios">📚 Estudios</button>
-      <button class="app-btn" data-app="servidor">🖥️ Servidor</button>
-    </nav>
-    <nav class="tabs" data-app-tabs="estudios" hidden>
-      <button class="tab-btn active" data-tab="tareas">Tareas</button>
-      <button class="tab-btn" data-tab="asignaturas">Asignaturas</button>
-      <button class="tab-btn" data-tab="examenes">Exámenes</button>
-    </nav>
-    <nav class="tabs" data-app-tabs="servidor" hidden>
-      <button class="tab-btn active" data-tab="servidor-tareas">Tareas</button>
-      <button class="tab-btn" data-tab="servidor-categorias">Categorías</button>
-    </nav>
+    <div class="wrap">
+      <div class="bar">
+        <a class="brand" href="/" aria-label="Seguimiento, inicio">
+          <svg class="brand-mark" viewBox="0 0 20 20" width="20" height="20" aria-hidden="true">
+            <rect x="2" y="3" width="16" height="3" rx="1.5" fill="currentColor" />
+            <rect x="2" y="8.5" width="10" height="3" rx="1.5" fill="currentColor" />
+            <path d="M3 15.8l2.3 2.2 4.4-4.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>Seguimiento</span>
+        </a>
+        <nav class="app-switch" aria-label="Secciones">
+          <button class="app-btn active" data-app="dashboard">Resumen</button>
+          <button class="app-btn" data-app="estudios">Estudios</button>
+          <button class="app-btn" data-app="servidor">Servidor</button>
+        </nav>
+      </div>
+      <nav class="tabs" data-app-tabs="estudios" aria-label="Estudios" hidden>
+        <button class="tab-btn active" data-tab="tareas">Tareas</button>
+        <button class="tab-btn" data-tab="asignaturas">Asignaturas</button>
+        <button class="tab-btn" data-tab="examenes">Exámenes</button>
+      </nav>
+      <nav class="tabs" data-app-tabs="servidor" aria-label="Servidor" hidden>
+        <button class="tab-btn active" data-tab="servidor-tareas">Tareas</button>
+        <button class="tab-btn" data-tab="servidor-categorias">Categorías</button>
+      </nav>
+    </div>
   </header>
 
-  <main>
+  <main class="wrap">
     <div data-app-panel="dashboard">
       <section id="panel-dashboard" class="tab-panel active">
-        <h2>Panorama general</h2>
-        <div class="cards-grid">
-          <div class="card">
-            <h3>Exámenes próximos</h3>
+        <h1>Resumen</h1>
+        <p id="dashboard-resumen" class="subline"></p>
+        <div class="cards-grid dash">
+          <section class="card">
+            <h2>Exámenes próximos</h2>
             <div id="dashboard-calendario" class="mini-cal"></div>
-            <ul id="dashboard-examenes" class="event-list"></ul>
-          </div>
-          <div class="card">
-            <h3>Tareas pendientes · Estudios</h3>
-            <ul id="dashboard-tareas-estudios" class="event-list"></ul>
-          </div>
-          <div class="card">
-            <h3>Tareas pendientes · Servidor</h3>
-            <ul id="dashboard-tareas-servidor" class="event-list"></ul>
-          </div>
+            <ul id="dashboard-examenes" class="rows"><li class="skeleton"></li><li class="skeleton"></li></ul>
+            <div class="card-footer"><button type="button" class="link" data-goto-app="estudios" data-goto-tab="examenes">Ver exámenes</button></div>
+          </section>
+          <section class="card">
+            <h2>Entregas pendientes</h2>
+            <ul id="dashboard-tareas-estudios" class="rows"><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li></ul>
+            <div class="card-footer"><button type="button" class="link" data-goto-app="estudios" data-goto-tab="tareas">Ver tareas</button></div>
+          </section>
+          <section class="card">
+            <h2>Pendiente en el servidor</h2>
+            <ul id="dashboard-tareas-servidor" class="rows"><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li></ul>
+            <div class="card-footer"><button type="button" class="link" data-goto-app="servidor" data-goto-tab="servidor-tareas">Ver tareas del servidor</button></div>
+          </section>
         </div>
         <p class="calendar-hint">
-          📅 Suscríbete al feed de calendario en
+          Calendario para el móvil:
           <code id="ics-url"></code>
-          <button id="copy-ics" type="button">Copiar</button>
+          <button id="copy-ics" type="button" class="btn-secondary">Copiar</button>
         </p>
       </section>
     </div>
 
     <div data-app-panel="estudios" hidden>
       <section id="tab-tareas" class="tab-panel active">
-        <h2>Tareas</h2>
-        <form id="form-tarea" class="inline-form">
+        <h1>Tareas</h1>
+        <form id="form-tarea" class="panel form-grid">
           <input type="hidden" name="id" value="" />
-          <select name="asignatura_id" required></select>
-          <input type="text" name="titulo" placeholder="Título de la tarea" required />
-          <input type="date" name="fecha_limite" title="Fecha de entrega" />
-          <input type="time" name="hora_limite" value="00:00" title="Hora de entrega" />
-          <select name="prioridad">
-            <option value="alta" selected>Alta</option>
-            <option value="media">Media</option>
-            <option value="baja">Baja</option>
-          </select>
-          <select name="opcional">
-            <option value="0" selected>Obligatoria</option>
-            <option value="1">Opcional</option>
-          </select>
-          <button type="submit" id="btn-tarea-submit">Añadir</button>
-          <button type="button" id="btn-tarea-cancelar" class="action-secondary" data-action="cancelar-tarea" hidden>Cancelar</button>
+          <label class="field">
+            <span>Asignatura</span>
+            <select name="asignatura_id" required></select>
+          </label>
+          <label class="field">
+            <span>Tema</span>
+            <select name="tema_id"><option value="">Sin tema</option></select>
+          </label>
+          <label class="field field-wide">
+            <span>Título</span>
+            <input type="text" name="titulo" required />
+          </label>
+          <label class="field">
+            <span>Fecha de entrega</span>
+            <input type="date" name="fecha_limite" />
+          </label>
+          <label class="field">
+            <span>Hora</span>
+            <input type="time" name="hora_limite" value="00:00" />
+          </label>
+          <label class="field">
+            <span>Tipo</span>
+            <select name="opcional">
+              <option value="0" selected>Obligatoria</option>
+              <option value="1">Opcional</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Prioridad</span>
+            <select name="prioridad">
+              <option value="alta" selected>Alta</option>
+              <option value="media">Media</option>
+              <option value="baja">Baja</option>
+            </select>
+          </label>
+          <div class="form-actions">
+            <button type="submit" id="btn-tarea-submit" class="btn-primary">Añadir tarea</button>
+            <button type="button" id="btn-tarea-cancelar" class="btn-secondary" data-action="cancelar-tarea" hidden>Cancelar</button>
+          </div>
         </form>
         <div class="cards-grid cards-2">
-          <div class="card">
-            <h3>📌 Obligatorias</h3>
-            <ul id="lista-tareas-obligatorias" class="item-list"></ul>
-          </div>
-          <div class="card">
-            <h3>✨ Opcionales</h3>
-            <ul id="lista-tareas-opcionales" class="item-list"></ul>
-          </div>
+          <section class="card">
+            <h2>Obligatorias</h2>
+            <ul id="lista-tareas-obligatorias" class="rows"><li class="skeleton"></li><li class="skeleton"></li></ul>
+          </section>
+          <section class="card">
+            <h2>Opcionales</h2>
+            <ul id="lista-tareas-opcionales" class="rows"><li class="skeleton"></li><li class="skeleton"></li></ul>
+          </section>
         </div>
       </section>
 
       <section id="tab-asignaturas" class="tab-panel">
-        <h2>Asignaturas</h2>
-        <form id="form-asignatura" class="inline-form">
-          <input type="text" name="nombre" placeholder="Nombre de la asignatura" required />
-          <input type="color" name="color" value="#4f46e5" />
-          <button type="submit">Añadir</button>
+        <h1>Asignaturas</h1>
+        <form id="form-asignatura" class="panel form-grid">
+          <label class="field field-wide">
+            <span>Nombre de la asignatura</span>
+            <input type="text" name="nombre" required />
+          </label>
+          <label class="field field-color">
+            <span>Color</span>
+            <input type="color" name="color" value="#1d5fbf" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Añadir asignatura</button>
+          </div>
         </form>
-        <ul id="lista-asignaturas" class="item-list"></ul>
+        <ul id="lista-asignaturas" class="stack"><li class="skeleton"></li><li class="skeleton"></li></ul>
       </section>
 
       <section id="tab-examenes" class="tab-panel">
-        <h2>Exámenes</h2>
-        <form id="form-examen" class="inline-form">
-          <select name="asignatura_id" required></select>
-          <input type="datetime-local" name="fecha" required />
-          <input type="text" name="notas" placeholder="Notas (opcional)" />
-          <button type="submit">Añadir</button>
+        <h1>Exámenes</h1>
+        <form id="form-examen" class="panel form-grid">
+          <label class="field">
+            <span>Asignatura</span>
+            <select name="asignatura_id" required></select>
+          </label>
+          <label class="field">
+            <span>Fecha y hora</span>
+            <input type="datetime-local" name="fecha" required />
+          </label>
+          <label class="field field-wide">
+            <span>Notas (opcional)</span>
+            <input type="text" name="notas" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Añadir examen</button>
+          </div>
         </form>
-        <ul id="lista-examenes" class="item-list"></ul>
+        <ul id="lista-examenes" class="rows panel-list"><li class="skeleton"></li><li class="skeleton"></li></ul>
       </section>
     </div>
 
     <div data-app-panel="servidor" hidden>
       <section id="tab-servidor-tareas" class="tab-panel active">
-        <h2>Tareas del servidor</h2>
-        <form id="form-tarea-servidor" class="inline-form">
+        <h1>Tareas del servidor</h1>
+        <form id="form-tarea-servidor" class="panel form-grid">
           <input type="hidden" name="id" value="" />
-          <select name="tipo" title="Tipo">
-            <option value="actualizacion" selected>🚀 Actualización</option>
-            <option value="bug">🐞 Bug</option>
-          </select>
-          <select name="categoria_id" required></select>
-          <input type="text" name="titulo" placeholder="Título de la tarea" required />
-          <input type="text" name="descripcion" placeholder="Descripción (opcional)" />
-          <select name="prioridad">
-            <option value="alta">Alta</option>
-            <option value="media" selected>Media</option>
-            <option value="baja">Baja</option>
-          </select>
-          <button type="submit" id="btn-tarea-servidor-submit">Añadir</button>
-          <button type="button" id="btn-tarea-servidor-cancelar" class="action-secondary" data-action="cancelar-tarea-servidor" hidden>Cancelar</button>
+          <label class="field">
+            <span>Tipo</span>
+            <select name="tipo">
+              <option value="actualizacion" selected>Actualización</option>
+              <option value="bug">Bug</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Categoría</span>
+            <select name="categoria_id" required></select>
+          </label>
+          <label class="field field-wide">
+            <span>Título</span>
+            <input type="text" name="titulo" required />
+          </label>
+          <label class="field field-wide">
+            <span>Descripción (opcional)</span>
+            <input type="text" name="descripcion" />
+          </label>
+          <label class="field">
+            <span>Prioridad</span>
+            <select name="prioridad">
+              <option value="alta">Alta</option>
+              <option value="media" selected>Media</option>
+              <option value="baja">Baja</option>
+            </select>
+          </label>
+          <div class="form-actions">
+            <button type="submit" id="btn-tarea-servidor-submit" class="btn-primary">Añadir tarea</button>
+            <button type="button" id="btn-tarea-servidor-cancelar" class="btn-secondary" data-action="cancelar-tarea-servidor" hidden>Cancelar</button>
+          </div>
         </form>
         <div class="cards-grid cards-2">
-          <div class="card">
-            <h3>🐞 Bugs</h3>
-            <ul id="lista-tareas-bugs" class="item-list"></ul>
-          </div>
-          <div class="card">
-            <h3>🚀 Actualizaciones futuras</h3>
-            <ul id="lista-tareas-actualizaciones" class="item-list"></ul>
-          </div>
+          <section class="card">
+            <h2>Bugs</h2>
+            <ul id="lista-tareas-bugs" class="rows"><li class="skeleton"></li><li class="skeleton"></li></ul>
+          </section>
+          <section class="card">
+            <h2>Actualizaciones futuras</h2>
+            <ul id="lista-tareas-actualizaciones" class="rows"><li class="skeleton"></li><li class="skeleton"></li></ul>
+          </section>
         </div>
       </section>
 
       <section id="tab-servidor-categorias" class="tab-panel">
-        <h2>Categorías</h2>
-        <form id="form-categoria-servidor" class="inline-form">
-          <input type="text" name="nombre" placeholder="Nombre de la categoría" required />
-          <input type="color" name="color" value="#0ea5e9" />
-          <button type="submit">Añadir</button>
+        <h1>Categorías</h1>
+        <form id="form-categoria-servidor" class="panel form-grid">
+          <label class="field field-wide">
+            <span>Nombre de la categoría</span>
+            <input type="text" name="nombre" required />
+          </label>
+          <label class="field field-color">
+            <span>Color</span>
+            <input type="color" name="color" value="#1d5fbf" />
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Añadir categoría</button>
+          </div>
         </form>
-        <ul id="lista-categorias-servidor" class="item-list"></ul>
+        <ul id="lista-categorias-servidor" class="rows panel-list"><li class="skeleton"></li><li class="skeleton"></li></ul>
       </section>
     </div>
   </main>

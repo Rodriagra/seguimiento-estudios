@@ -1,4 +1,4 @@
-const CACHE_NAME = 'seguimiento-estudios-v7';
+const CACHE_NAME = 'seguimiento-estudios-v8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -7,6 +7,8 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/fonts/geist-latin.woff2',
+  '/fonts/geist-latin-ext.woff2',
 ];
 
 self.addEventListener('install', (event) => {

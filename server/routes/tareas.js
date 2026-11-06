@@ -7,10 +7,19 @@ const ESTADOS = ['pendiente', 'en_progreso', 'hecha'];
 const PRIORIDADES = ['alta', 'media', 'baja'];
 
 const SELECT_JOIN = `
-  SELECT tareas.*, asignaturas.nombre AS asignatura_nombre, asignaturas.color AS asignatura_color
+  SELECT tareas.*, asignaturas.nombre AS asignatura_nombre, asignaturas.color AS asignatura_color,
+         temas.titulo AS tema_titulo
   FROM tareas
   JOIN asignaturas ON asignaturas.id = tareas.asignatura_id
+  LEFT JOIN temas ON temas.id = tareas.tema_id
 `;
+
+// Un tema solo vale si existe y pertenece a la asignatura de la tarea; si no, la tarea queda sin tema.
+function temaValido(tema_id, asignatura_id) {
+  if (!tema_id) return null;
+  const tema = db.prepare('SELECT id FROM temas WHERE id = ? AND asignatura_id = ?').get(tema_id, asignatura_id);
+  return tema ? tema.id : null;
+}
 
 router.get('/', (req, res) => {
   const rows = db.prepare(`${SELECT_JOIN} ORDER BY (fecha_limite IS NULL), fecha_limite ASC`).all();
@@ -18,7 +27,7 @@ router.get('/', (req, res) => {
 });
 
 router.post('/', (req, res) => {
-  const { asignatura_id, titulo, fecha_limite, estado, prioridad, opcional } = req.body;
+  const { asignatura_id, titulo, fecha_limite, estado, prioridad, opcional, tema_id } = req.body;
   if (!asignatura_id || !titulo || !titulo.trim()) {
     return res.status(400).json({ error: 'asignatura_id y titulo son obligatorios' });
   }
@@ -28,9 +37,9 @@ router.post('/', (req, res) => {
   const fechaFinal = fecha_limite || null;
   const info = db
     .prepare(
-      'INSERT INTO tareas (asignatura_id, titulo, fecha_limite, estado, prioridad, opcional) VALUES (?, ?, ?, ?, ?, ?)'
+      'INSERT INTO tareas (asignatura_id, titulo, fecha_limite, estado, prioridad, opcional, tema_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
     )
-    .run(asignatura_id, titulo.trim(), fechaFinal, estadoFinal, prioridadFinal, opcionalFinal);
+    .run(asignatura_id, titulo.trim(), fechaFinal, estadoFinal, prioridadFinal, opcionalFinal, temaValido(tema_id, asignatura_id));
   const row = db.prepare(`${SELECT_JOIN} WHERE tareas.id = ?`).get(info.lastInsertRowid);
   res.status(201).json(row);
 });
@@ -44,9 +53,10 @@ router.put('/:id', (req, res) => {
   const estado = ESTADOS.includes(req.body.estado) ? req.body.estado : existing.estado;
   const prioridad = PRIORIDADES.includes(req.body.prioridad) ? req.body.prioridad : existing.prioridad;
   const opcional = 'opcional' in req.body ? (req.body.opcional ? 1 : 0) : existing.opcional;
+  const tema_id = temaValido('tema_id' in req.body ? req.body.tema_id : existing.tema_id, asignatura_id);
   db.prepare(
-    'UPDATE tareas SET asignatura_id = ?, titulo = ?, fecha_limite = ?, estado = ?, prioridad = ?, opcional = ? WHERE id = ?'
-  ).run(asignatura_id, titulo, fecha_limite, estado, prioridad, opcional, req.params.id);
+    'UPDATE tareas SET asignatura_id = ?, titulo = ?, fecha_limite = ?, estado = ?, prioridad = ?, opcional = ?, tema_id = ? WHERE id = ?'
+  ).run(asignatura_id, titulo, fecha_limite, estado, prioridad, opcional, tema_id, req.params.id);
   res.json(db.prepare(`${SELECT_JOIN} WHERE tareas.id = ?`).get(req.params.id));
 });
 

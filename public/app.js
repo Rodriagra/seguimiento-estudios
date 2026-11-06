@@ -3,20 +3,46 @@ const state = {
   examenes: [],
   tareas: [],
   temas: [],
+  subtemas: [],
   categoriasServidor: [],
   tareasServidor: [],
   abiertas: new Set(),
   calMes: { y: new Date().getFullYear(), m: new Date().getMonth() },
+  ultimaCarga: null,
 };
 
-const fmtDate = (iso) =>
-  new Date(iso).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+const esc = (s) =>
+  String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+// Fecha corta; la hora solo se muestra si no es medianoche (00:00 es la hora por defecto).
+function fmtFecha(iso) {
+  const d = new Date(iso);
+  const dia = d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+  return d.getHours() === 0 && d.getMinutes() === 0 ? dia : `${dia}, ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
 
 const toDatetimeLocalValue = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
-  const pad = (n) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+};
+
+const inicioDia = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const diasHasta = (iso) => Math.round((inicioDia(new Date(iso)) - inicioDia(new Date())) / 86400000);
+
+function textoPlazo(dias) {
+  if (dias < 0) return `vencida hace ${-dias} d`;
+  if (dias === 0) return 'hoy';
+  if (dias === 1) return 'mañana';
+  return `en ${dias} días`;
+}
+
+const plazoHtml = (iso) => {
+  const dias = diasHasta(iso);
+  const clase = dias < 0 ? ' vencida' : dias <= 2 ? ' pronto' : '';
+  return `<span class="plazo${clase}">${textoPlazo(dias)}</span>`;
 };
 
 async function api(path, options = {}) {
@@ -31,11 +57,7 @@ async function api(path, options = {}) {
   return res.status === 204 ? null : res.json();
 }
 
-const APP_TITLES = {
-  dashboard: '🏠 Dashboard',
-  estudios: '📚 Seguimiento Estudios',
-  servidor: '🖥️ Tareas del Servidor',
-};
+/* ---------- Navegación ---------- */
 
 function switchApp(app) {
   document.querySelectorAll('.app-btn').forEach((b) => b.classList.toggle('active', b.dataset.app === app));
@@ -45,7 +67,6 @@ function switchApp(app) {
   document.querySelectorAll('[data-app-panel]').forEach((panel) => {
     panel.hidden = panel.dataset.appPanel !== app;
   });
-  document.getElementById('app-title').textContent = APP_TITLES[app];
 }
 
 function switchTab(tab) {
@@ -85,75 +106,170 @@ function initDashboardLinks() {
   });
 }
 
+/* ---------- Selects ---------- */
+
 function fillAsignaturaSelects() {
   document.querySelectorAll('select[name="asignatura_id"]').forEach((select) => {
-    select.innerHTML = state.asignaturas
-      .map((a) => `<option value="${a.id}">${a.nombre}</option>`)
-      .join('');
+    const previo = select.value;
+    select.innerHTML = state.asignaturas.map((a) => `<option value="${a.id}">${esc(a.nombre)}</option>`).join('');
+    if (previo && state.asignaturas.some((a) => String(a.id) === previo)) select.value = previo;
   });
+  fillTemaSelect();
+}
+
+// El selector de tema de una tarea solo ofrece los temas de la asignatura elegida.
+function fillTemaSelect(seleccionado) {
+  const form = document.getElementById('form-tarea');
+  const select = form.elements['tema_id'];
+  const previo = seleccionado !== undefined ? String(seleccionado ?? '') : select.value;
+  const asignaturaId = Number(form.elements['asignatura_id'].value);
+  const temas = state.temas.filter((t) => t.asignatura_id === asignaturaId);
+  select.innerHTML =
+    '<option value="">Sin tema</option>' + temas.map((t) => `<option value="${t.id}">${esc(t.titulo)}</option>`).join('');
+  select.value = temas.some((t) => String(t.id) === previo) ? previo : '';
 }
 
 function fillCategoriaServidorSelects() {
   document.querySelectorAll('select[name="categoria_id"]').forEach((select) => {
-    select.innerHTML = state.categoriasServidor
-      .map((c) => `<option value="${c.id}">${c.nombre}</option>`)
-      .join('');
+    const previo = select.value;
+    select.innerHTML = state.categoriasServidor.map((c) => `<option value="${c.id}">${esc(c.nombre)}</option>`).join('');
+    if (previo && state.categoriasServidor.some((c) => String(c.id) === previo)) select.value = previo;
   });
+}
+
+/* ---------- Asignaturas, temas y apartados ---------- */
+
+// Los apartados de un tema son sus subtemas y las tareas que cuelgan de él. Completar una tarea
+// aquí o en la pestaña Tareas es lo mismo: ambas leen y escriben tarea.estado.
+function hijosDeTema(tema) {
+  const subtemas = state.subtemas
+    .filter((s) => s.tema_id === tema.id)
+    .map((s) => ({ tipo: 'subtema', id: s.id, titulo: s.titulo, hecho: !!s.completado }));
+  const tareas = state.tareas
+    .filter((t) => t.tema_id === tema.id)
+    .map((t) => ({
+      tipo: 'tarea',
+      id: t.id,
+      titulo: t.titulo,
+      hecho: t.estado === 'hecha',
+      fecha: t.fecha_limite,
+      opcional: !!t.opcional,
+    }));
+  return [...subtemas, ...tareas];
+}
+
+// Con apartados, el tema está completo cuando lo están todos; sin apartados se marca a mano.
+function temaCompleto(tema) {
+  const hijos = hijosDeTema(tema);
+  return hijos.length ? hijos.every((h) => h.hecho) : !!tema.completado;
+}
+
+function hijoHtml(h) {
+  const meta = [h.tipo === 'tarea' ? 'Tarea' : null, h.fecha ? fmtFecha(h.fecha) : null, h.opcional ? 'opcional' : null]
+    .filter(Boolean)
+    .join(' · ');
+  return `
+        <li class="hijo${h.hecho ? ' done' : ''}">
+          <label class="check">
+            <input type="checkbox" data-action="toggle-hijo" data-tipo="${h.tipo}" data-id="${h.id}" ${h.hecho ? 'checked' : ''} />
+            <span class="check-text">${esc(h.titulo)}</span>
+          </label>
+          ${meta ? `<span class="row-meta">${esc(meta)}</span>` : ''}
+          ${
+            h.tipo === 'subtema'
+              ? `<button type="button" class="link danger" data-action="del-subtema" data-id="${h.id}" aria-label="Eliminar apartado ${esc(h.titulo)}">Eliminar</button>`
+              : ''
+          }
+        </li>`;
+}
+
+function temaHtml(tema) {
+  const hijos = hijosDeTema(tema);
+  const completo = temaCompleto(tema);
+  const hechos = hijos.filter((h) => h.hecho).length;
+  const conteo = hijos.length ? `<span class="num row-meta">${hechos}/${hijos.length}</span>` : '';
+  const casilla = hijos.length
+    ? `<input type="checkbox" disabled ${completo ? 'checked' : ''} aria-label="Tema completado cuando lo estén todos sus apartados" />`
+    : `<input type="checkbox" data-action="toggle-tema" data-id="${tema.id}" ${completo ? 'checked' : ''} />`;
+  return `
+      <li class="tema${completo ? ' done' : ''}">
+        <div class="tema-row">
+          <label class="check">${casilla}<span class="check-text">${esc(tema.titulo)}</span></label>
+          ${conteo}
+          <button type="button" class="link danger" data-action="del-tema" data-id="${tema.id}" aria-label="Eliminar tema ${esc(tema.titulo)}">Eliminar</button>
+        </div>
+        ${hijos.length ? `<ul class="hijos">${hijos.map(hijoHtml).join('')}</ul>` : ''}
+      </li>`;
 }
 
 function renderAsignaturas() {
   const ul = document.getElementById('lista-asignaturas');
   if (state.asignaturas.length === 0) {
-    ul.innerHTML = '<li class="empty-hint">No hay asignaturas todavía.</li>';
+    ul.innerHTML = '<li class="empty">No hay asignaturas todavía. Añade la primera arriba.</li>';
     return;
   }
   ul.innerHTML = state.asignaturas
     .map((a) => {
       const temas = state.temas.filter((t) => t.asignatura_id === a.id);
-      const hechos = temas.filter((t) => t.completado).length;
-      const completadas = state.tareas.filter((t) => t.asignatura_id === a.id && t.estado === 'hecha');
+      const completos = temas.filter(temaCompleto).length;
+      const pct = temas.length ? Math.round((completos / temas.length) * 100) : 0;
+      const otras = state.tareas.filter((t) => t.asignatura_id === a.id && t.estado === 'hecha' && !t.tema_id);
       const temasHtml = temas.length
-        ? temas
+        ? temas.map(temaHtml).join('')
+        : '<li class="empty">Sin temas todavía. Añade el primero.</li>';
+      const otrasHtml = otras.length
+        ? otras
             .map(
               (t) => `
-          <li class="tema ${t.completado ? 'done' : ''}">
-            <label>
-              <input type="checkbox" data-action="toggle-tema" data-id="${t.id}" ${t.completado ? 'checked' : ''} />
-              <span>${t.titulo}</span>
-            </label>
-            <button class="action-danger" data-action="del-tema" data-id="${t.id}">✕</button>
-          </li>`
+        <li class="hijo done">
+          <span class="check-text">${esc(t.titulo)}${t.opcional ? ' <span class="row-meta">opcional</span>' : ''}</span>
+          <button type="button" class="link" data-action="reabrir-tarea" data-id="${t.id}">Reabrir</button>
+        </li>`
             )
             .join('')
-        : '<li class="empty-hint">Sin temas todavía.</li>';
-      const completadasHtml = completadas.length
-        ? completadas
-            .map(
-              (t) => `
-          <li class="tema done">
-            <span>✔ ${t.titulo}${t.opcional ? ' <em>(opcional)</em>' : ''}</span>
-            <button class="action-secondary" data-action="reabrir-tarea" data-id="${t.id}">Reabrir</button>
-          </li>`
-            )
-            .join('')
-        : '<li class="empty-hint">Ninguna tarea completada.</li>';
+        : '<li class="empty">Ninguna tarea completada sin tema.</li>';
+      const opcionesTema = temas.map((t) => `<option value="${t.id}">${esc(t.titulo)}</option>`).join('');
       return `
-    <li class="asignatura-item" style="border-left-color:${a.color}">
+    <li class="asig">
       <details data-asignatura="${a.id}" ${state.abiertas.has(a.id) ? 'open' : ''}>
         <summary>
-          <span class="tag" style="background:${a.color}">${a.nombre}</span>
-          <span class="item-meta">${hechos}/${temas.length} temas · ${completadas.length} tareas completadas</span>
-          <button class="action-danger" data-action="del-asignatura" data-id="${a.id}">Eliminar</button>
+          <span class="dot" style="background:${esc(a.color)}"></span>
+          <span class="asig-name">${esc(a.nombre)}</span>
+          <span class="asig-prog">
+            <span class="progreso" role="img" aria-label="${completos} de ${temas.length} temas completados"><i style="width:${pct}%"></i></span>
+            <span class="num row-meta">${temas.length ? `${completos}/${temas.length} temas` : 'sin temas'}</span>
+          </span>
         </summary>
-        <div class="asignatura-detalle">
-          <h4>Temas</h4>
-          <form class="inline-form form-tema" data-asignatura-id="${a.id}">
-            <input type="text" name="titulo" placeholder="Nuevo tema" required />
-            <button type="submit">Añadir tema</button>
+        <div class="asig-body">
+          <form class="form-grid form-tema" data-asignatura-id="${a.id}">
+            <label class="field field-wide">
+              <span>Nuevo tema</span>
+              <input type="text" name="titulo" required />
+            </label>
+            <div class="form-actions"><button type="submit" class="btn-secondary">Añadir tema</button></div>
           </form>
-          <ul class="sub-list">${temasHtml}</ul>
-          <h4>Tareas completadas</h4>
-          <ul class="sub-list">${completadasHtml}</ul>
+          ${
+            temas.length
+              ? `<form class="form-grid form-apartado">
+            <label class="field">
+              <span>Tema del apartado</span>
+              <select name="tema_id" required>${opcionesTema}</select>
+            </label>
+            <label class="field field-wide">
+              <span>Nuevo apartado</span>
+              <input type="text" name="titulo" required />
+            </label>
+            <div class="form-actions"><button type="submit" class="btn-secondary">Añadir apartado</button></div>
+          </form>`
+              : ''
+          }
+          <h3>Temas</h3>
+          <ul class="arbol">${temasHtml}</ul>
+          <h3>Otras tareas completadas</h3>
+          <ul class="hijos plano">${otrasHtml}</ul>
+          <div class="asig-footer">
+            <button type="button" class="link danger" data-action="del-asignatura" data-id="${a.id}">Eliminar asignatura</button>
+          </div>
         </div>
       </details>
     </li>`;
@@ -161,27 +277,32 @@ function renderAsignaturas() {
     .join('');
 }
 
+/* ---------- Exámenes ---------- */
+
 function renderExamenes() {
   const ul = document.getElementById('lista-examenes');
   if (state.examenes.length === 0) {
-    ul.innerHTML = '<li class="empty-hint">No hay exámenes todavía.</li>';
+    ul.innerHTML = '<li class="empty">No hay exámenes todavía.</li>';
     return;
   }
   ul.innerHTML = state.examenes
     .map(
       (e) => `
-    <li style="border-left-color:${e.asignatura_color}">
-      <div class="item-main">
-        <span class="item-title">${e.asignatura_nombre}</span>
-        <span class="item-meta">${fmtDate(e.fecha)}${e.notas ? ' · ' + e.notas : ''}</span>
+    <li class="row">
+      <span class="dot" style="background:${esc(e.asignatura_color)}"></span>
+      <div class="row-main">
+        <span class="row-title">${esc(e.asignatura_nombre)}</span>
+        <span class="row-meta">${fmtFecha(e.fecha)}${e.notas ? ' · ' + esc(e.notas) : ''}</span>
       </div>
-      <div class="item-actions">
-        <button class="action-danger" data-action="del-examen" data-id="${e.id}">Eliminar</button>
+      <div class="row-actions">
+        <button type="button" class="link danger" data-action="del-examen" data-id="${e.id}">Eliminar</button>
       </div>
     </li>`
     )
     .join('');
 }
+
+/* ---------- Tareas de estudios ---------- */
 
 function renderTareas() {
   // Más urgentes arriba; las tareas sin fecha van al final de su columna.
@@ -194,28 +315,37 @@ function renderTareas() {
   const pendientes = state.tareas.filter((t) => t.estado !== 'hecha').sort(porFecha);
   const render = (ulId, tareas, vacio) => {
     const ul = document.getElementById(ulId);
-    ul.innerHTML = tareas.length ? tareas.map(tareaEstudiosHtml).join('') : `<li class="empty-hint">${vacio}</li>`;
+    ul.innerHTML = tareas.length ? tareas.map(tareaEstudiosHtml).join('') : `<li class="empty">${vacio}</li>`;
   };
   render('lista-tareas-obligatorias', pendientes.filter((t) => !t.opcional), 'No hay tareas obligatorias pendientes.');
   render('lista-tareas-opcionales', pendientes.filter((t) => t.opcional), 'No hay tareas opcionales pendientes.');
 }
 
 function tareaEstudiosHtml(t) {
-  const meta = [t.asignatura_nombre, t.fecha_limite ? fmtDate(t.fecha_limite) : 'sin fecha', `prioridad ${t.prioridad}`].join(' · ');
+  const meta = [
+    t.asignatura_nombre,
+    t.tema_titulo,
+    t.fecha_limite ? fmtFecha(t.fecha_limite) : 'sin fecha',
+    `prioridad ${t.prioridad}`,
+  ]
+    .filter(Boolean)
+    .map(esc)
+    .join(' · ');
   return `
-    <li style="border-left-color:${t.asignatura_color}">
-      <div class="item-main">
-        <span class="item-title">${t.titulo}</span>
-        <span class="item-meta">${meta}</span>
+    <li class="row">
+      <span class="dot" style="background:${esc(t.asignatura_color)}"></span>
+      <div class="row-main">
+        <span class="row-title">${esc(t.titulo)}</span>
+        <span class="row-meta">${meta}</span>
       </div>
-      <div class="item-actions">
-        <select data-action="estado-tarea" data-id="${t.id}">
+      <div class="row-actions">
+        <select data-action="estado-tarea" data-id="${t.id}" aria-label="Estado de ${esc(t.titulo)}">
           <option value="pendiente" ${t.estado === 'pendiente' ? 'selected' : ''}>Pendiente</option>
           <option value="en_progreso" ${t.estado === 'en_progreso' ? 'selected' : ''}>En progreso</option>
           <option value="hecha" ${t.estado === 'hecha' ? 'selected' : ''}>Hecha</option>
         </select>
-        <button class="action-secondary" data-action="edit-tarea" data-id="${t.id}">Editar</button>
-        <button class="action-danger" data-action="del-tarea" data-id="${t.id}">Eliminar</button>
+        <button type="button" class="link" data-action="edit-tarea" data-id="${t.id}">Editar</button>
+        <button type="button" class="link danger" data-action="del-tarea" data-id="${t.id}">Eliminar</button>
       </div>
     </li>`;
 }
@@ -224,6 +354,7 @@ function startEditTarea(tarea) {
   const form = document.getElementById('form-tarea');
   form.elements['id'].value = tarea.id;
   form.elements['asignatura_id'].value = tarea.asignatura_id;
+  fillTemaSelect(tarea.tema_id);
   form.elements['titulo'].value = tarea.titulo;
   const [fecha, hora] = toDatetimeLocalValue(tarea.fecha_limite).split('T');
   form.elements['fecha_limite'].value = fecha || '';
@@ -239,25 +370,27 @@ function cancelEditTarea() {
   const form = document.getElementById('form-tarea');
   form.reset();
   form.elements['id'].value = '';
-  document.getElementById('btn-tarea-submit').textContent = 'Añadir';
+  fillTemaSelect('');
+  document.getElementById('btn-tarea-submit').textContent = 'Añadir tarea';
   document.getElementById('btn-tarea-cancelar').hidden = true;
 }
+
+/* ---------- Servidor ---------- */
 
 function renderCategoriasServidor() {
   const ul = document.getElementById('lista-categorias-servidor');
   if (state.categoriasServidor.length === 0) {
-    ul.innerHTML = '<li class="empty-hint">No hay categorías todavía.</li>';
+    ul.innerHTML = '<li class="empty">No hay categorías todavía.</li>';
     return;
   }
   ul.innerHTML = state.categoriasServidor
     .map(
       (c) => `
-    <li>
-      <div class="item-main">
-        <span class="tag" style="background:${c.color}">${c.nombre}</span>
-      </div>
-      <div class="item-actions">
-        <button class="action-danger" data-action="del-categoria-servidor" data-id="${c.id}">Eliminar</button>
+    <li class="row">
+      <span class="dot" style="background:${esc(c.color)}"></span>
+      <div class="row-main"><span class="row-title">${esc(c.nombre)}</span></div>
+      <div class="row-actions">
+        <button type="button" class="link danger" data-action="del-categoria-servidor" data-id="${c.id}">Eliminar</button>
       </div>
     </li>`
     )
@@ -267,9 +400,9 @@ function renderCategoriasServidor() {
 function renderTareasServidor() {
   const render = (ulId, tareas, vacio) => {
     const ul = document.getElementById(ulId);
-    ul.innerHTML = tareas.length ? tareas.map(tareaServidorHtml).join('') : `<li class="empty-hint">${vacio}</li>`;
+    ul.innerHTML = tareas.length ? tareas.map(tareaServidorHtml).join('') : `<li class="empty">${vacio}</li>`;
   };
-  render('lista-tareas-bugs', state.tareasServidor.filter((t) => t.tipo === 'bug'), 'Sin bugs. 🎉');
+  render('lista-tareas-bugs', state.tareasServidor.filter((t) => t.tipo === 'bug'), 'Sin bugs abiertos.');
   render(
     'lista-tareas-actualizaciones',
     state.tareasServidor.filter((t) => t.tipo !== 'bug'),
@@ -278,15 +411,17 @@ function renderTareasServidor() {
 }
 
 function tareaServidorHtml(t) {
+  const meta = [t.categoria_nombre, `prioridad ${t.prioridad}`, t.descripcion].filter(Boolean).map(esc).join(' · ');
   return `
-    <li style="border-left-color:${t.categoria_color}">
-      <div class="item-main">
-        <span class="item-title">${t.titulo}</span>
-        <span class="item-meta">${t.categoria_nombre} · prioridad ${t.prioridad}${t.descripcion ? ' · ' + t.descripcion : ''}</span>
+    <li class="row">
+      <span class="dot" style="background:${esc(t.categoria_color)}"></span>
+      <div class="row-main">
+        <span class="row-title">${esc(t.titulo)}</span>
+        <span class="row-meta">${meta}</span>
       </div>
-      <div class="item-actions">
-        <button class="action-secondary" data-action="edit-tarea-servidor" data-id="${t.id}">Editar</button>
-        <button class="action-danger" data-action="del-tarea-servidor" data-id="${t.id}">Eliminar</button>
+      <div class="row-actions">
+        <button type="button" class="link" data-action="edit-tarea-servidor" data-id="${t.id}">Editar</button>
+        <button type="button" class="link danger" data-action="del-tarea-servidor" data-id="${t.id}">Eliminar</button>
       </div>
     </li>`;
 }
@@ -308,11 +443,13 @@ function cancelEditTareaServidor() {
   const form = document.getElementById('form-tarea-servidor');
   form.reset();
   form.elements['id'].value = '';
-  document.getElementById('btn-tarea-servidor-submit').textContent = 'Añadir';
+  document.getElementById('btn-tarea-servidor-submit').textContent = 'Añadir tarea';
   document.getElementById('btn-tarea-servidor-cancelar').hidden = true;
 }
 
-const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+/* ---------- Dashboard ---------- */
+
+const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
 const DIAS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 function renderCalendario() {
@@ -342,13 +479,13 @@ function renderCalendario() {
     const tars = tareasPorDia[d] || [];
     const esHoy = d === hoy.getDate() && m === hoy.getMonth() && y === hoy.getFullYear();
     const dots =
-      exs.map((e) => `<i style="background:${e.asignatura_color}"></i>`).join('') +
-      tars.map((t) => `<i class="sq" style="background:${t.asignatura_color}"></i>`).join('');
+      exs.map((e) => `<i style="background:${esc(e.asignatura_color)}"></i>`).join('') +
+      tars.map((t) => `<i class="sq" style="background:${esc(t.asignatura_color)}"></i>`).join('');
     const title = [
       ...exs.map((e) => `Examen: ${e.asignatura_nombre}`),
       ...tars.map((t) => `Entrega: ${t.titulo} (${t.asignatura_nombre})`),
     ].join('\n');
-    celdas += `<span class="cal-day${esHoy ? ' today' : ''}${exs.length || tars.length ? ' has-exam' : ''}" ${title ? `title="${title}"` : ''}>
+    celdas += `<span class="cal-day${esHoy ? ' today' : ''}${exs.length || tars.length ? ' has-event' : ''}" ${title ? `title="${esc(title)}"` : ''}>
       <b>${d}</b><span class="cal-dots">${dots}</span></span>`;
   }
 
@@ -365,73 +502,121 @@ function renderCalendario() {
     <p class="cal-legend"><i></i> Examen <i class="sq"></i> Entrega de tarea</p>`;
 }
 
+function resumenDashboard(data) {
+  const entrega = data.tareasEstudios[0];
+  if (entrega) {
+    const dias = diasHasta(entrega.fecha_limite);
+    const prefijo = dias < 0 ? 'Entrega vencida' : 'Próxima entrega';
+    return `${prefijo}: ${entrega.titulo} (${entrega.asignatura_nombre}), ${textoPlazo(dias)}.`;
+  }
+  const examen = data.examenes[0];
+  if (examen) return `Próximo examen: ${examen.asignatura_nombre}, ${textoPlazo(diasHasta(examen.fecha))}.`;
+  return 'No tienes entregas ni exámenes pendientes.';
+}
+
 async function renderDashboard() {
   renderCalendario();
   const data = await api('/api/dashboard');
-  const examenesUl = document.getElementById('dashboard-examenes');
-  examenesUl.innerHTML =
+  document.getElementById('dashboard-resumen').textContent = resumenDashboard(data);
+
+  document.getElementById('dashboard-examenes').innerHTML =
     data.examenes.length === 0
-      ? '<li class="empty-hint">Sin exámenes próximos.</li>'
+      ? '<li class="empty">Sin exámenes próximos.</li>'
       : data.examenes
           .map(
             (e) => `
-    <li style="border-left-color:${e.asignatura_color}" data-goto-app="estudios" data-goto-tab="examenes">
-      ${e.asignatura_nombre} · ${fmtDate(e.fecha)}
+    <li class="row clickable" data-goto-app="estudios" data-goto-tab="examenes">
+      <span class="dot" style="background:${esc(e.asignatura_color)}"></span>
+      <div class="row-main">
+        <span class="row-title">${esc(e.asignatura_nombre)}</span>
+        <span class="row-meta">${fmtFecha(e.fecha)}</span>
+      </div>
+      ${plazoHtml(e.fecha)}
     </li>`
           )
           .join('');
 
-  const tareasEstudiosUl = document.getElementById('dashboard-tareas-estudios');
-  tareasEstudiosUl.innerHTML =
+  document.getElementById('dashboard-tareas-estudios').innerHTML =
     data.tareasEstudios.length === 0
-      ? '<li class="empty-hint">Sin tareas pendientes.</li>'
+      ? '<li class="empty">Sin entregas pendientes.</li>'
       : data.tareasEstudios
           .map(
             (t) => `
-    <li style="border-left-color:${t.asignatura_color}" data-goto-app="estudios" data-goto-tab="tareas">
-      ${t.titulo} · ${fmtDate(t.fecha_limite)}
+    <li class="row clickable" data-goto-app="estudios" data-goto-tab="tareas">
+      <span class="dot" style="background:${esc(t.asignatura_color)}"></span>
+      <div class="row-main">
+        <span class="row-title">${esc(t.titulo)}</span>
+        <span class="row-meta">${esc(t.asignatura_nombre)} · ${fmtFecha(t.fecha_limite)}</span>
+      </div>
+      ${plazoHtml(t.fecha_limite)}
     </li>`
           )
           .join('');
 
-  const tareasServidorUl = document.getElementById('dashboard-tareas-servidor');
-  tareasServidorUl.innerHTML =
+  document.getElementById('dashboard-tareas-servidor').innerHTML =
     data.tareasServidor.length === 0
-      ? '<li class="empty-hint">Sin tareas pendientes.</li>'
+      ? '<li class="empty">Nada pendiente en el servidor.</li>'
       : data.tareasServidor
           .map(
             (t) => `
-    <li style="border-left-color:${t.categoria_color}" data-goto-app="servidor" data-goto-tab="servidor-tareas">
-      ${t.titulo} · ${t.categoria_nombre}
+    <li class="row clickable" data-goto-app="servidor" data-goto-tab="servidor-tareas">
+      <span class="dot" style="background:${esc(t.categoria_color)}"></span>
+      <div class="row-main">
+        <span class="row-title">${esc(t.titulo)}</span>
+        <span class="row-meta">${esc(t.categoria_nombre)} · ${t.tipo === 'bug' ? 'bug' : 'actualización'}</span>
+      </div>
     </li>`
           )
           .join('');
 }
 
-async function loadAll() {
-  const [asignaturas, examenes, tareas, temas, categoriasServidor, tareasServidor] = await Promise.all([
-    api('/api/asignaturas'),
-    api('/api/examenes'),
-    api('/api/tareas'),
-    api('/api/temas'),
-    api('/api/categorias-servidor'),
-    api('/api/tareas-servidor'),
-  ]);
-  state.asignaturas = asignaturas;
-  state.examenes = examenes;
-  state.tareas = tareas;
-  state.temas = temas;
-  state.categoriasServidor = categoriasServidor;
-  state.tareasServidor = tareasServidor;
-  fillAsignaturaSelects();
-  fillCategoriaServidorSelects();
-  renderAsignaturas();
-  renderExamenes();
-  renderTareas();
-  renderCategoriasServidor();
-  renderTareasServidor();
-  await renderDashboard();
+/* ---------- Carga ---------- */
+
+// Un fallo de carga se dice dentro de cada bloque, con la última carga buena y un botón para reintentar.
+function renderErrorCarga() {
+  const hora = state.ultimaCarga ? ` Última carga correcta: ${pad2(state.ultimaCarga.getHours())}:${pad2(state.ultimaCarga.getMinutes())}.` : '';
+  const aviso = `<li class="empty error">No se pudieron cargar los datos.${hora} <button type="button" class="link" data-action="reintentar">Reintentar</button></li>`;
+  document
+    .querySelectorAll('#dashboard-examenes, #dashboard-tareas-estudios, #dashboard-tareas-servidor, #lista-tareas-obligatorias, #lista-tareas-opcionales, #lista-asignaturas, #lista-examenes, #lista-tareas-bugs, #lista-tareas-actualizaciones, #lista-categorias-servidor')
+    .forEach((ul) => {
+      ul.innerHTML = aviso;
+    });
 }
+
+async function loadAll() {
+  try {
+    const [asignaturas, examenes, tareas, temas, subtemas, categoriasServidor, tareasServidor] = await Promise.all([
+      api('/api/asignaturas'),
+      api('/api/examenes'),
+      api('/api/tareas'),
+      api('/api/temas'),
+      api('/api/subtemas'),
+      api('/api/categorias-servidor'),
+      api('/api/tareas-servidor'),
+    ]);
+    state.asignaturas = asignaturas;
+    state.examenes = examenes;
+    state.tareas = tareas;
+    state.temas = temas;
+    state.subtemas = subtemas;
+    state.categoriasServidor = categoriasServidor;
+    state.tareasServidor = tareasServidor;
+    fillAsignaturaSelects();
+    fillCategoriaServidorSelects();
+    renderAsignaturas();
+    renderExamenes();
+    renderTareas();
+    renderCategoriasServidor();
+    renderTareasServidor();
+    await renderDashboard();
+    state.ultimaCarga = new Date();
+  } catch (err) {
+    console.error(err);
+    renderErrorCarga();
+  }
+}
+
+/* ---------- Formularios ---------- */
 
 function initForms() {
   document.getElementById('form-asignatura').addEventListener('submit', async (e) => {
@@ -466,6 +651,7 @@ function initForms() {
     const id = fd.get('id');
     const payload = {
       asignatura_id: Number(fd.get('asignatura_id')),
+      tema_id: fd.get('tema_id') ? Number(fd.get('tema_id')) : null,
       titulo: fd.get('titulo'),
       fecha_limite: fd.get('fecha_limite')
         ? new Date(`${fd.get('fecha_limite')}T${fd.get('hora_limite') || '00:00'}`).toISOString()
@@ -482,6 +668,9 @@ function initForms() {
     await loadAll();
   });
 
+  // Al cambiar de asignatura, el selector de tema pasa a mostrar los temas de la nueva.
+  document.querySelector('#form-tarea select[name="asignatura_id"]').addEventListener('change', () => fillTemaSelect(''));
+
   // Las obligatorias nacen con prioridad alta; las opcionales con media (solo al crear).
   document.querySelector('#form-tarea select[name="opcional"]').addEventListener('change', (e) => {
     const form = e.target.form;
@@ -495,14 +684,23 @@ function initForms() {
   });
 
   document.getElementById('lista-asignaturas').addEventListener('submit', async (e) => {
-    const form = e.target.closest('.form-tema');
-    if (!form) return;
+    const form = e.target;
+    const esTema = form.classList.contains('form-tema');
+    const esApartado = form.classList.contains('form-apartado');
+    if (!esTema && !esApartado) return;
     e.preventDefault();
     const fd = new FormData(form);
-    await api('/api/temas', {
-      method: 'POST',
-      body: JSON.stringify({ asignatura_id: Number(form.dataset.asignaturaId), titulo: fd.get('titulo') }),
-    });
+    if (esTema) {
+      await api('/api/temas', {
+        method: 'POST',
+        body: JSON.stringify({ asignatura_id: Number(form.dataset.asignaturaId), titulo: fd.get('titulo') }),
+      });
+    } else {
+      await api('/api/subtemas', {
+        method: 'POST',
+        body: JSON.stringify({ tema_id: Number(fd.get('tema_id')), titulo: fd.get('titulo') }),
+      });
+    }
     await loadAll();
   });
 
@@ -538,22 +736,31 @@ function initForms() {
   });
 }
 
+/* ---------- Acciones de lista ---------- */
+
 function initListActions() {
   document.body.addEventListener('click', async (e) => {
     const btn = e.target.closest('button[data-action]');
     if (!btn) return;
     const { action, id } = btn.dataset;
     if (action === 'del-asignatura') {
-      e.preventDefault(); // el botón está dentro de <summary>: no desplegar/plegar
-      if (!confirm('¿Eliminar asignatura y sus exámenes/tareas/temas asociados?')) return;
+      const asig = state.asignaturas.find((a) => a.id === Number(id));
+      if (!confirm(`¿Eliminar "${asig?.nombre ?? 'la asignatura'}" con sus exámenes, tareas y temas?`)) return;
       await api(`/api/asignaturas/${id}`, { method: 'DELETE' });
       await loadAll();
     } else if (action === 'cal-prev' || action === 'cal-next') {
       const d = new Date(state.calMes.y, state.calMes.m + (action === 'cal-next' ? 1 : -1), 1);
       state.calMes = { y: d.getFullYear(), m: d.getMonth() };
       renderCalendario();
+    } else if (action === 'reintentar') {
+      await loadAll();
     } else if (action === 'del-tema') {
+      const tema = state.temas.find((t) => t.id === Number(id));
+      if (!confirm(`¿Eliminar el tema "${tema?.titulo ?? ''}" y sus apartados? Las tareas enlazadas se conservan, sin tema.`)) return;
       await api(`/api/temas/${id}`, { method: 'DELETE' });
+      await loadAll();
+    } else if (action === 'del-subtema') {
+      await api(`/api/subtemas/${id}`, { method: 'DELETE' });
       await loadAll();
     } else if (action === 'reabrir-tarea') {
       await api(`/api/tareas/${id}`, { method: 'PUT', body: JSON.stringify({ estado: 'pendiente' }) });
@@ -569,7 +776,8 @@ function initListActions() {
       if (tarea) startEditTarea(tarea);
     } else if (action === 'cancelar-tarea') {
       cancelEditTarea();
-    } else if (action === 'del-categoria-servidor' && confirm('¿Eliminar categoría y sus tareas asociadas?')) {
+    } else if (action === 'del-categoria-servidor') {
+      if (!confirm('¿Eliminar categoría y sus tareas asociadas?')) return;
       await api(`/api/categorias-servidor/${id}`, { method: 'DELETE' });
       await loadAll();
     } else if (action === 'del-tarea-servidor') {
@@ -583,27 +791,38 @@ function initListActions() {
     }
   });
 
-  document.body.addEventListener('toggle', (e) => {
-    const id = Number(e.target.dataset?.asignatura);
-    if (!id) return;
-    if (e.target.open) state.abiertas.add(id);
-    else state.abiertas.delete(id);
-  }, true);
+  document.body.addEventListener(
+    'toggle',
+    (e) => {
+      const id = Number(e.target.dataset?.asignatura);
+      if (!id) return;
+      if (e.target.open) state.abiertas.add(id);
+      else state.abiertas.delete(id);
+    },
+    true
+  );
 
   document.body.addEventListener('change', async (e) => {
-    const check = e.target.closest('input[data-action="toggle-tema"]');
+    const check = e.target.closest('input[data-action]');
     if (check) {
-      await api(`/api/temas/${check.dataset.id}`, {
-        method: 'PUT',
-        body: JSON.stringify({ completado: check.checked }),
-      });
+      const { action, tipo, id } = check.dataset;
+      if (action === 'toggle-tema') {
+        await api(`/api/temas/${id}`, { method: 'PUT', body: JSON.stringify({ completado: check.checked }) });
+      } else if (action === 'toggle-hijo' && tipo === 'tarea') {
+        // Misma fuente de verdad que la pestaña Tareas: marcar aquí es marcar allí.
+        await api(`/api/tareas/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify({ estado: check.checked ? 'hecha' : 'pendiente' }),
+        });
+      } else if (action === 'toggle-hijo') {
+        await api(`/api/subtemas/${id}`, { method: 'PUT', body: JSON.stringify({ completado: check.checked }) });
+      }
       await loadAll();
       return;
     }
     const select = e.target.closest('select[data-action="estado-tarea"]');
     if (!select) return;
-    const endpoint = 'tareas';
-    await api(`/api/${endpoint}/${select.dataset.id}`, {
+    await api(`/api/tareas/${select.dataset.id}`, {
       method: 'PUT',
       body: JSON.stringify({ estado: select.value }),
     });

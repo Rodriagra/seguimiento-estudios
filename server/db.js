@@ -42,6 +42,13 @@ db.exec(`
     completado INTEGER NOT NULL DEFAULT 0
   );
 
+  CREATE TABLE IF NOT EXISTS subtemas (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tema_id INTEGER NOT NULL REFERENCES temas(id) ON DELETE CASCADE,
+    titulo TEXT NOT NULL,
+    completado INTEGER NOT NULL DEFAULT 0
+  );
+
   CREATE TABLE IF NOT EXISTS categorias_servidor (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL UNIQUE,
@@ -93,6 +100,12 @@ if (tareasServidorCols.includes('fecha_limite')) {
 // Migración: las Tareas del Servidor se dividen en 'bug' y 'actualizacion' (las existentes pasan a actualizacion).
 if (!tareasServidorCols.includes('tipo')) {
   db.exec("ALTER TABLE tareas_servidor ADD COLUMN tipo TEXT NOT NULL DEFAULT 'actualizacion'");
+}
+
+// Migración: una tarea puede colgar de un tema. Al borrar el tema la tarea se conserva, sin tema.
+const tareasColsActuales = db.prepare('PRAGMA table_info(tareas)').all().map((c) => c.name);
+if (!tareasColsActuales.includes('tema_id')) {
+  db.exec('ALTER TABLE tareas ADD COLUMN tema_id INTEGER REFERENCES temas(id) ON DELETE SET NULL');
 }
 
 const ASIGNATURAS_INICIALES = [
