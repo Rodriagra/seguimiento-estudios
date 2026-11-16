@@ -47,23 +47,45 @@
       <section id="panel-dashboard" class="tab-panel active">
         <h1>Resumen</h1>
         <p id="dashboard-resumen" class="subline"></p>
-        <div class="cards-grid dash">
+        <div class="dash-top">
           <section class="card">
             <h2>Exámenes próximos</h2>
             <div id="dashboard-calendario" class="mini-cal"></div>
             <ul id="dashboard-examenes" class="rows"><li class="skeleton"></li><li class="skeleton"></li></ul>
             <div class="card-footer"><button type="button" class="link" data-goto-app="estudios" data-goto-tab="examenes">Ver exámenes</button></div>
           </section>
-          <section class="card">
-            <h2>Entregas pendientes</h2>
-            <ul id="dashboard-tareas-estudios" class="rows"><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li></ul>
-            <div class="card-footer"><button type="button" class="link" data-goto-app="estudios" data-goto-tab="tareas">Ver tareas</button></div>
-          </section>
-          <section class="card">
-            <h2>Pendiente en el servidor</h2>
-            <ul id="dashboard-tareas-servidor" class="rows"><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li></ul>
-            <div class="card-footer"><button type="button" class="link" data-goto-app="servidor" data-goto-tab="servidor-tareas">Ver tareas del servidor</button></div>
-          </section>
+          <div class="dash-stack">
+            <section class="card">
+              <h2>Entregas pendientes</h2>
+              <ul id="dashboard-tareas-estudios" class="rows"><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li></ul>
+              <div class="card-footer">
+                <button type="button" class="link" data-goto-app="estudios" data-goto-tab="tareas">Ver tareas</button>
+                <span id="dash-mas-entregas" class="row-meta"></span>
+              </div>
+            </section>
+            <section class="card">
+              <h2>Pendiente en el servidor</h2>
+              <ul id="dashboard-tareas-servidor" class="rows"><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li></ul>
+              <div class="card-footer">
+                <button type="button" class="link" data-goto-app="servidor" data-goto-tab="servidor-tareas">Ver tareas del servidor</button>
+                <span id="dash-mas-servidor" class="row-meta"></span>
+              </div>
+            </section>
+          </div>
+        </div>
+        <div class="panel semana-panel dash-semana">
+          <div class="sem-head">
+            <div class="sem-titulo">
+              <h2>Horario de estudio</h2>
+              <span id="dash-rango" class="row-meta"></span>
+            </div>
+            <div class="sem-nav">
+              <button type="button" class="btn-secondary" data-action="sem-hoy">Hoy</button>
+              <button type="button" class="btn-secondary" data-action="sem-prev" aria-label="Semana anterior">‹</button>
+              <button type="button" class="btn-secondary" data-action="sem-next" aria-label="Semana siguiente">›</button>
+            </div>
+          </div>
+          <div id="dash-semana" class="sem-scroll"></div>
         </div>
         <p class="calendar-hint">
           Calendario para el móvil:
@@ -151,15 +173,23 @@
       <section id="tab-horario" class="tab-panel">
         <h1>Horario</h1>
         <form id="form-horario" class="panel form-grid">
+          <input type="hidden" name="id" value="" />
           <label class="field">
             <span>Asignatura</span>
             <select name="asignatura_id" required></select>
           </label>
           <label class="field">
-            <span>Desde</span>
-            <input type="date" name="fecha_desde" required />
+            <span>Repetición</span>
+            <select name="modo">
+              <option value="semanas" selected>Varias semanas</option>
+              <option value="dia">Un solo día</option>
+            </select>
           </label>
           <label class="field">
+            <span id="horario-desde-etiqueta">Desde</span>
+            <input type="date" name="fecha_desde" required />
+          </label>
+          <label class="field campo-hasta">
             <span>Hasta</span>
             <input type="date" name="fecha_hasta" required />
           </label>
@@ -190,7 +220,8 @@
             </select>
           </label>
           <div class="form-actions">
-            <button type="submit" class="btn-primary">Añadir al horario</button>
+            <button type="submit" id="btn-horario-submit" class="btn-primary">Añadir al horario</button>
+            <button type="button" id="btn-horario-cancelar" class="btn-secondary" data-action="cancelar-horario" hidden>Cancelar</button>
           </div>
           <p id="horario-error" class="form-error" role="alert" hidden></p>
         </form>

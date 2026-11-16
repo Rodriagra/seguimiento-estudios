@@ -425,14 +425,15 @@ function cancelEditTarea() {
 const DIAS_CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const PX_HORA = 48;
 
-function renderHorario() {
+// Pinta la cuadrícula de la semana visible en un contenedor; se usa en Horario y en el Resumen.
+function pintarSemana(contenedorId, rangoId) {
   const lunes = state.semanaInicio;
   const dias = [...Array(7)].map((_, i) => {
     const d = new Date(lunes);
     d.setDate(d.getDate() + i);
     return d;
   });
-  document.getElementById('horario-rango').textContent =
+  document.getElementById(rangoId).textContent =
     `${fechaCorta(dias[0])} – ${dias[6].toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`;
 
   // La franja visible abarca de 08:00 a 21:00 y se amplía si alguna sesión cae fuera.
@@ -487,12 +488,58 @@ function renderHorario() {
     })
     .join('');
 
-  document.getElementById('horario-semana').innerHTML = `
+  document.getElementById(contenedorId).innerHTML = `
     <div class="semana">
       <div class="sem-esquina"></div>${cabeceras}
       <div class="sem-horas" style="height:${alto}px">${etiquetas.join('')}</div>${columnas}
       <div class="sem-lineas" style="height:${alto}px">${lineas.join('')}</div>
     </div>`;
+}
+
+// Un campo de fecha final y los días de la semana solo tienen sentido si la franja se repite varias semanas.
+function aplicarModoHorario() {
+  const form = document.getElementById('form-horario');
+  const unDia = form.elements['modo'].value === 'dia';
+  form.querySelector('.campo-hasta').hidden = unDia;
+  form.querySelector('.dias').hidden = unDia;
+  form.elements['fecha_hasta'].required = !unDia;
+  document.getElementById('horario-desde-etiqueta').textContent = unDia ? 'Fecha' : 'Desde';
+}
+
+function startEditHorario(h) {
+  const form = document.getElementById('form-horario');
+  const dias = h.dias_semana.split(',');
+  form.elements['id'].value = h.id;
+  form.elements['asignatura_id'].value = h.asignatura_id;
+  form.elements['modo'].value = h.fecha_desde === h.fecha_hasta ? 'dia' : 'semanas';
+  form.elements['fecha_desde'].value = h.fecha_desde;
+  form.elements['fecha_hasta'].value = h.fecha_hasta;
+  form.elements['hora'].value = h.hora;
+  form.elements['duracion_min'].value = String(h.duracion_min);
+  form.querySelectorAll('input[name="dias"]').forEach((c) => {
+    c.checked = dias.includes(c.value);
+  });
+  aplicarModoHorario();
+  document.getElementById('btn-horario-submit').textContent = 'Guardar cambios';
+  document.getElementById('btn-horario-cancelar').hidden = false;
+  document.getElementById('horario-error').hidden = true;
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function cancelEditHorario() {
+  const form = document.getElementById('form-horario');
+  form.reset();
+  form.elements['id'].value = '';
+  form.elements['fecha_desde'].value = ymd(new Date());
+  aplicarModoHorario();
+  document.getElementById('btn-horario-submit').textContent = 'Añadir al horario';
+  document.getElementById('btn-horario-cancelar').hidden = true;
+  document.getElementById('horario-error').hidden = true;
+}
+
+function renderHorario() {
+  pintarSemana('horario-semana', 'horario-rango');
+  pintarSemana('dash-semana', 'dash-rango');
 
   const ul = document.getElementById('horario-franjas');
   ul.innerHTML = state.horarios.length
@@ -508,9 +555,14 @@ function renderHorario() {
       <span class="dot" style="background:${esc(h.asignatura_color)}"></span>
       <div class="row-main">
         <span class="row-title">${esc(h.asignatura_nombre)}</span>
-        <span class="row-meta">${nombres} · ${fechaCorta(fechaDeYmd(h.fecha_desde))} – ${fechaCorta(fechaDeYmd(h.fecha_hasta))} · ${h.hora}–${fin}</span>
+        <span class="row-meta">${
+          h.fecha_desde === h.fecha_hasta
+            ? `${nombres} ${fechaCorta(fechaDeYmd(h.fecha_desde))} · un solo día`
+            : `${nombres} · ${fechaCorta(fechaDeYmd(h.fecha_desde))} – ${fechaCorta(fechaDeYmd(h.fecha_hasta))}`
+        } · ${h.hora}–${fin}</span>
       </div>
       <div class="row-actions">
+        <button type="button" class="link" data-action="edit-horario" data-id="${h.id}">Editar</button>
         <button type="button" class="link danger" data-action="del-horario" data-id="${h.id}">Eliminar</button>
       </div>
     </li>`;
@@ -661,6 +713,8 @@ function resumenDashboard(data) {
   return 'No tienes entregas ni exámenes pendientes.';
 }
 
+const FILAS_RESUMEN = 4;
+
 async function renderDashboard() {
   renderCalendario();
   const data = await api('/api/dashboard');
@@ -670,6 +724,7 @@ async function renderDashboard() {
     data.examenes.length === 0
       ? '<li class="empty">Sin exámenes próximos.</li>'
       : data.examenes
+          .slice(0, 4)
           .map(
             (e) => `
     <li class="row clickable" data-goto-app="estudios" data-goto-tab="examenes">
@@ -687,6 +742,7 @@ async function renderDashboard() {
     data.tareasEstudios.length === 0
       ? '<li class="empty">Sin entregas pendientes.</li>'
       : data.tareasEstudios
+          .slice(0, FILAS_RESUMEN)
           .map(
             (t) => `
     <li class="row clickable" data-goto-app="estudios" data-goto-tab="tareas">
@@ -704,6 +760,7 @@ async function renderDashboard() {
     data.tareasServidor.length === 0
       ? '<li class="empty">Nada pendiente en el servidor.</li>'
       : data.tareasServidor
+          .slice(0, FILAS_RESUMEN)
           .map(
             (t) => `
     <li class="row clickable" data-goto-app="servidor" data-goto-tab="servidor-tareas">
@@ -715,6 +772,11 @@ async function renderDashboard() {
     </li>`
           )
           .join('');
+
+  // El resumen enseña solo las primeras filas; el resto está en su pestaña.
+  const resto = (n) => (n > FILAS_RESUMEN ? `Mostrando ${FILAS_RESUMEN} de ${n}${n >= 10 ? '+' : ''}` : '');
+  document.getElementById('dash-mas-entregas').textContent = resto(data.tareasEstudios.length);
+  document.getElementById('dash-mas-servidor').textContent = resto(data.tareasServidor.length);
 }
 
 /* ---------- Carga ---------- */
@@ -802,20 +864,24 @@ function initForms() {
     const aviso = document.getElementById('horario-error');
     aviso.hidden = true;
     const fd = new FormData(e.target);
-    const dias = fd.getAll('dias').map(Number);
+    const id = fd.get('id');
+    const unDia = fd.get('modo') === 'dia';
+    const desde = fd.get('fecha_desde');
+    // Una sesión de un solo día es una franja con desde = hasta y el día de la semana de esa fecha.
+    const dias = unDia ? [diaIso(fechaDeYmd(desde))] : fd.getAll('dias').map(Number);
     if (dias.length === 0) {
       aviso.textContent = 'Elige al menos un día de la semana.';
       aviso.hidden = false;
       return;
     }
     try {
-      await api('/api/horarios', {
-        method: 'POST',
+      await api(id ? `/api/horarios/${id}` : '/api/horarios', {
+        method: id ? 'PUT' : 'POST',
         body: JSON.stringify({
           asignatura_id: Number(fd.get('asignatura_id')),
           dias_semana: dias,
-          fecha_desde: fd.get('fecha_desde'),
-          fecha_hasta: fd.get('fecha_hasta'),
+          fecha_desde: desde,
+          fecha_hasta: unDia ? desde : fd.get('fecha_hasta'),
           hora: fd.get('hora') || '16:00',
           duracion_min: Number(fd.get('duracion_min')),
         }),
@@ -825,10 +891,10 @@ function initForms() {
       aviso.hidden = false;
       return;
     }
-    e.target.reset();
-    e.target.elements['fecha_desde'].value = ymd(new Date());
+    cancelEditHorario();
     await loadAll();
   });
+  formHorario.elements['modo'].addEventListener('change', aplicarModoHorario);
 
   document.getElementById('form-tarea').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -942,6 +1008,11 @@ function initListActions() {
       await api('/api/temas', { method: 'POST', body: JSON.stringify({ asignatura_id: Number(id) }) });
       state.abiertas.add(Number(id));
       await loadAll();
+    } else if (action === 'edit-horario') {
+      const franja = state.horarios.find((h) => h.id === Number(id));
+      if (franja) startEditHorario(franja);
+    } else if (action === 'cancelar-horario') {
+      cancelEditHorario();
     } else if (action === 'del-horario') {
       await api(`/api/horarios/${id}`, { method: 'DELETE' });
       await loadAll();

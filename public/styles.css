@@ -463,7 +463,7 @@ h1 + .panel, h1 + .cards-grid { margin-top: 20px; }
   display: flex;
   flex-direction: column;
   align-items: center;
-  min-height: 40px;
+  min-height: 36px;
   padding: 4px 0;
   border-radius: var(--radius-control);
   font-size: 13px;
@@ -765,3 +765,30 @@ h1 + .panel, h1 + .cards-grid { margin-top: 20px; }
 
 .hijo-slot { flex: none; width: 64px; }
 .asig-actions { margin-top: 16px; }
+
+/* ---------- Resumen: calendario a la izquierda, dos listas cortas apiladas a la derecha, semana debajo ---------- */
+
+[hidden] { display: none !important; }
+
+.dash-top {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  align-items: stretch;
+}
+
+.dash-stack { display: grid; grid-template-rows: 1fr 1fr; gap: var(--gap); }
+
+.dash-top .card { display: flex; flex-direction: column; }
+
+.card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+.dash-semana { margin-top: var(--gap); }
+
+.sem-titulo { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.sem-titulo h2 { margin: 0; }
+
+@media (max-width: 960px) {
+  .dash-top { grid-template-columns: 1fr; }
+  .dash-stack { grid-template-rows: auto; }
+}
