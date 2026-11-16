@@ -185,7 +185,7 @@ function fillCategoriaServidorSelects() {
 function hijosDeTema(tema) {
   const subtemas = state.subtemas
     .filter((s) => s.tema_id === tema.id)
-    .map((s) => ({ tipo: 'subtema', id: s.id, titulo: s.titulo, hecho: !!s.completado }));
+    .map((s) => ({ tipo: 'subtema', id: s.id, titulo: s.titulo, hecho: !!s.completado, horas: Number(s.horas) }));
   const tareas = state.tareas
     .filter((t) => t.tema_id === tema.id)
     .map((t) => ({
@@ -193,6 +193,7 @@ function hijosDeTema(tema) {
       id: t.id,
       titulo: t.titulo,
       hecho: t.estado === 'hecha',
+      horas: Number(t.horas),
       fecha: t.fecha_limite,
       opcional: !!t.opcional,
     }));
@@ -216,10 +217,13 @@ function hijoHtml(h) {
             <span class="check-text">${esc(h.titulo)}</span>
           </label>
           ${meta ? `<span class="row-meta">${esc(meta)}</span>` : ''}
+          <select class="horas-select" data-action="horas-hijo" data-tipo="${h.tipo}" data-id="${h.id}" aria-label="Horas de estudio de ${esc(h.titulo)}">
+            ${HORAS_OPCIONES.map(([v, t]) => `<option value="${v}" ${h.horas === v ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
           ${
             h.tipo === 'subtema'
               ? `<button type="button" class="link danger" data-action="del-subtema" data-id="${h.id}" aria-label="Eliminar apartado ${esc(h.titulo)}">Eliminar</button>`
-              : ''
+              : '<span class="hijo-slot"></span>'
           }
         </li>`;
 }
@@ -237,9 +241,6 @@ function temaHtml(tema) {
         <div class="tema-row">
           <label class="check">${casilla}<span class="check-text">${esc(tema.titulo)}</span></label>
           ${conteo}
-          <select class="horas-select" data-action="horas-tema" data-id="${tema.id}" aria-label="Horas de estudio de ${esc(tema.titulo)}">
-            ${HORAS_OPCIONES.map(([v, t]) => `<option value="${v}" ${Number(tema.horas) === v ? 'selected' : ''}>${t}</option>`).join('')}
-          </select>
           <button type="button" class="link danger" data-action="del-tema" data-id="${tema.id}" aria-label="Eliminar tema ${esc(tema.titulo)}">Eliminar</button>
         </div>
         ${hijos.length ? `<ul class="hijos">${hijos.map(hijoHtml).join('')}</ul>` : ''}
@@ -257,8 +258,10 @@ function renderAsignaturas() {
       const temas = state.temas.filter((t) => t.asignatura_id === a.id);
       const completos = temas.filter(temaCompleto).length;
       const pct = temas.length ? Math.round((completos / temas.length) * 100) : 0;
-      const horasTotal = temas.reduce((n, t) => n + Number(t.horas), 0);
-      const horasHechas = temas.filter(temaCompleto).reduce((n, t) => n + Number(t.horas), 0);
+      // Las horas viven en los apartados; cada apartado hecho suma las suyas.
+      const apartados = temas.flatMap(hijosDeTema);
+      const horasTotal = apartados.reduce((n, h) => n + h.horas, 0);
+      const horasHechas = apartados.filter((h) => h.hecho).reduce((n, h) => n + h.horas, 0);
       const otras = state.tareas.filter((t) => t.asignatura_id === a.id && t.estado === 'hecha' && !t.tema_id);
       const temasHtml = temas.length
         ? temas.map(temaHtml).join('')
@@ -287,13 +290,9 @@ function renderAsignaturas() {
           </span>
         </summary>
         <div class="asig-body">
-          <form class="form-grid form-tema" data-asignatura-id="${a.id}">
-            <label class="field field-wide">
-              <span>Nuevo tema</span>
-              <input type="text" name="titulo" required />
-            </label>
-            <div class="form-actions"><button type="submit" class="btn-secondary">Añadir tema</button></div>
-          </form>
+          <div class="asig-actions">
+            <button type="button" class="btn-secondary" data-action="add-tema" data-id="${a.id}">Añadir tema</button>
+          </div>
           ${
             temas.length
               ? `<form class="form-grid form-apartado">
@@ -871,22 +870,13 @@ function initForms() {
 
   document.getElementById('lista-asignaturas').addEventListener('submit', async (e) => {
     const form = e.target;
-    const esTema = form.classList.contains('form-tema');
-    const esApartado = form.classList.contains('form-apartado');
-    if (!esTema && !esApartado) return;
+    if (!form.classList.contains('form-apartado')) return;
     e.preventDefault();
     const fd = new FormData(form);
-    if (esTema) {
-      await api('/api/temas', {
-        method: 'POST',
-        body: JSON.stringify({ asignatura_id: Number(form.dataset.asignaturaId), titulo: fd.get('titulo') }),
-      });
-    } else {
-      await api('/api/subtemas', {
-        method: 'POST',
-        body: JSON.stringify({ tema_id: Number(fd.get('tema_id')), titulo: fd.get('titulo') }),
-      });
-    }
+    await api('/api/subtemas', {
+      method: 'POST',
+      body: JSON.stringify({ tema_id: Number(fd.get('tema_id')), titulo: fd.get('titulo') }),
+    });
     await loadAll();
   });
 
@@ -947,6 +937,11 @@ function initListActions() {
         state.semanaInicio = d;
       }
       renderHorario();
+    } else if (action === 'add-tema') {
+      // El servidor le pone el nombre: "Tema 1" si no hay ninguno, o el siguiente número.
+      await api('/api/temas', { method: 'POST', body: JSON.stringify({ asignatura_id: Number(id) }) });
+      state.abiertas.add(Number(id));
+      await loadAll();
     } else if (action === 'del-horario') {
       await api(`/api/horarios/${id}`, { method: 'DELETE' });
       await loadAll();
@@ -1018,9 +1013,10 @@ function initListActions() {
       await loadAll();
       return;
     }
-    const horas = e.target.closest('select[data-action="horas-tema"]');
+    const horas = e.target.closest('select[data-action="horas-hijo"]');
     if (horas) {
-      await api(`/api/temas/${horas.dataset.id}`, { method: 'PUT', body: JSON.stringify({ horas: Number(horas.value) }) });
+      const recurso = horas.dataset.tipo === 'tarea' ? 'tareas' : 'subtemas';
+      await api(`/api/${recurso}/${horas.dataset.id}`, { method: 'PUT', body: JSON.stringify({ horas: Number(horas.value) }) });
       await loadAll();
       return;
     }

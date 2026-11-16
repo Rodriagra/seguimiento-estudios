@@ -5,6 +5,8 @@ export const router = Router();
 
 const ESTADOS = ['pendiente', 'en_progreso', 'hecha'];
 const PRIORIDADES = ['alta', 'media', 'baja'];
+// Horas estimadas de estudio cuando la tarea es un apartado de un tema; 3 es la opción "+2 h".
+const HORAS = [0.5, 1, 1.5, 2, 3];
 
 const SELECT_JOIN = `
   SELECT tareas.*, asignaturas.nombre AS asignatura_nombre, asignaturas.color AS asignatura_color,
@@ -54,9 +56,10 @@ router.put('/:id', (req, res) => {
   const prioridad = PRIORIDADES.includes(req.body.prioridad) ? req.body.prioridad : existing.prioridad;
   const opcional = 'opcional' in req.body ? (req.body.opcional ? 1 : 0) : existing.opcional;
   const tema_id = temaValido('tema_id' in req.body ? req.body.tema_id : existing.tema_id, asignatura_id);
+  const horas = HORAS.includes(Number(req.body.horas)) ? Number(req.body.horas) : existing.horas;
   db.prepare(
-    'UPDATE tareas SET asignatura_id = ?, titulo = ?, fecha_limite = ?, estado = ?, prioridad = ?, opcional = ?, tema_id = ? WHERE id = ?'
-  ).run(asignatura_id, titulo, fecha_limite, estado, prioridad, opcional, tema_id, req.params.id);
+    'UPDATE tareas SET asignatura_id = ?, titulo = ?, fecha_limite = ?, estado = ?, prioridad = ?, opcional = ?, tema_id = ?, horas = ? WHERE id = ?'
+  ).run(asignatura_id, titulo, fecha_limite, estado, prioridad, opcional, tema_id, horas, req.params.id);
   res.json(db.prepare(`${SELECT_JOIN} WHERE tareas.id = ?`).get(req.params.id));
 });
 

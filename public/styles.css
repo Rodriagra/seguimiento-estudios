@@ -751,3 +751,17 @@ h1 + .panel, h1 + .cards-grid { margin-top: 20px; }
 
 .sesion.multi { padding: 4px; }
 .sesion.multi .sesion-nombre { font-size: 12px; overflow-wrap: anywhere; hyphens: auto; }
+
+/* ---------- Apartados: horas y botón de nuevo tema ---------- */
+
+.hijo .horas-select {
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--control);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 13px;
+}
+
+.hijo-slot { flex: none; width: 64px; }
+.asig-actions { margin-top: 16px; }

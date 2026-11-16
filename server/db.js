@@ -118,10 +118,11 @@ if (!tareasColsActuales.includes('tema_id')) {
   db.exec('ALTER TABLE tareas ADD COLUMN tema_id INTEGER REFERENCES temas(id) ON DELETE SET NULL');
 }
 
-// Migración: horas estimadas de estudio por tema (0.5, 1, 1.5, 2 o 3 para "+2 h"). Los temas existentes empiezan en 1.
-const temasCols = db.prepare('PRAGMA table_info(temas)').all().map((c) => c.name);
-if (!temasCols.includes('horas')) {
-  db.exec('ALTER TABLE temas ADD COLUMN horas REAL NOT NULL DEFAULT 1');
+// Migración: horas estimadas de estudio por apartado (subtemas y tareas enlazadas a un tema): 0.5, 1, 1.5, 2 o 3
+// para "+2 h". Los existentes empiezan en 1. Los temas son solo categorías; su antigua columna 'horas' ya no se usa.
+for (const tabla of ['subtemas', 'tareas']) {
+  const cols = db.prepare(`PRAGMA table_info(${tabla})`).all().map((c) => c.name);
+  if (!cols.includes('horas')) db.exec(`ALTER TABLE ${tabla} ADD COLUMN horas REAL NOT NULL DEFAULT 1`);
 }
 
 const ASIGNATURAS_INICIALES = [
