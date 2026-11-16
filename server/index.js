@@ -8,6 +8,7 @@ import { router as examenesRouter } from './routes/examenes.js';
 import { router as tareasRouter } from './routes/tareas.js';
 import { router as temasRouter } from './routes/temas.js';
 import { router as subtemasRouter } from './routes/subtemas.js';
+import { router as horariosRouter } from './routes/horarios.js';
 import { router as categoriasServidorRouter } from './routes/categoriasServidor.js';
 import { router as tareasServidorRouter } from './routes/tareasServidor.js';
 
@@ -23,6 +24,7 @@ app.use('/api/examenes', examenesRouter);
 app.use('/api/tareas', tareasRouter);
 app.use('/api/temas', temasRouter);
 app.use('/api/subtemas', subtemasRouter);
+app.use('/api/horarios', horariosRouter);
 app.use('/api/categorias-servidor', categoriasServidorRouter);
 app.use('/api/tareas-servidor', tareasServidorRouter);
 
@@ -65,7 +67,13 @@ app.get('/calendar.ics', (req, res) => {
        FROM tareas JOIN asignaturas ON asignaturas.id = tareas.asignatura_id`
     )
     .all();
-  const ics = buildCalendarFeed({ examenes, tareas });
+  const horarios = db
+    .prepare(
+      `SELECT horarios.*, asignaturas.nombre AS asignatura_nombre
+       FROM horarios JOIN asignaturas ON asignaturas.id = horarios.asignatura_id`
+    )
+    .all();
+  const ics = buildCalendarFeed({ examenes, tareas, horarios });
   res.set('Content-Type', 'text/calendar; charset=utf-8');
   res.set('Content-Disposition', 'inline; filename="estudios.ics"');
   res.send(ics);

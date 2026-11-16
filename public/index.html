@@ -32,6 +32,7 @@
       <nav class="tabs" data-app-tabs="estudios" aria-label="Estudios" hidden>
         <button class="tab-btn active" data-tab="tareas">Tareas</button>
         <button class="tab-btn" data-tab="asignaturas">Asignaturas</button>
+        <button class="tab-btn" data-tab="horario">Horario</button>
         <button class="tab-btn" data-tab="examenes">Exámenes</button>
       </nav>
       <nav class="tabs" data-app-tabs="servidor" aria-label="Servidor" hidden>
@@ -145,6 +146,67 @@
           </div>
         </form>
         <ul id="lista-asignaturas" class="stack"><li class="skeleton"></li><li class="skeleton"></li></ul>
+      </section>
+
+      <section id="tab-horario" class="tab-panel">
+        <h1>Horario</h1>
+        <form id="form-horario" class="panel form-grid">
+          <label class="field">
+            <span>Asignatura</span>
+            <select name="asignatura_id" required></select>
+          </label>
+          <label class="field">
+            <span>Desde</span>
+            <input type="date" name="fecha_desde" required />
+          </label>
+          <label class="field">
+            <span>Hasta</span>
+            <input type="date" name="fecha_hasta" required />
+          </label>
+          <label class="field">
+            <span>Hora de inicio</span>
+            <input type="time" name="hora" value="16:00" />
+          </label>
+          <fieldset class="field field-wide dias">
+            <legend>Días de la semana</legend>
+            <div class="chips">
+              <label class="chip"><input type="checkbox" name="dias" value="1" /><span>Lun</span></label>
+              <label class="chip"><input type="checkbox" name="dias" value="2" /><span>Mar</span></label>
+              <label class="chip"><input type="checkbox" name="dias" value="3" /><span>Mié</span></label>
+              <label class="chip"><input type="checkbox" name="dias" value="4" /><span>Jue</span></label>
+              <label class="chip"><input type="checkbox" name="dias" value="5" /><span>Vie</span></label>
+              <label class="chip"><input type="checkbox" name="dias" value="6" /><span>Sáb</span></label>
+              <label class="chip"><input type="checkbox" name="dias" value="7" /><span>Dom</span></label>
+            </div>
+          </fieldset>
+          <label class="field">
+            <span>Duración</span>
+            <select name="duracion_min">
+              <option value="60">1 h</option>
+              <option value="90">1,5 h</option>
+              <option value="120" selected>2 h</option>
+              <option value="150">2,5 h</option>
+              <option value="180">3 h</option>
+            </select>
+          </label>
+          <div class="form-actions">
+            <button type="submit" class="btn-primary">Añadir al horario</button>
+          </div>
+          <p id="horario-error" class="form-error" role="alert" hidden></p>
+        </form>
+        <div class="panel semana-panel">
+          <div class="sem-head">
+            <h2 id="horario-rango"></h2>
+            <div class="sem-nav">
+              <button type="button" class="btn-secondary" data-action="sem-hoy">Hoy</button>
+              <button type="button" class="btn-secondary" data-action="sem-prev" aria-label="Semana anterior">‹</button>
+              <button type="button" class="btn-secondary" data-action="sem-next" aria-label="Semana siguiente">›</button>
+            </div>
+          </div>
+          <div id="horario-semana" class="sem-scroll"></div>
+        </div>
+        <h2 class="subseccion">Franjas de estudio</h2>
+        <ul id="horario-franjas" class="rows panel-list"><li class="skeleton"></li><li class="skeleton"></li></ul>
       </section>
 
       <section id="tab-examenes" class="tab-panel">

@@ -9,6 +9,8 @@ const state = {
   abiertas: new Set(),
   calMes: { y: new Date().getFullYear(), m: new Date().getMonth() },
   ultimaCarga: null,
+  horarios: [],
+  semanaInicio: null, // lunes de la semana visible en Horario; se fija más abajo con lunesDe()
 };
 
 const esc = (s) =>
@@ -44,6 +46,45 @@ const plazoHtml = (iso) => {
   const clase = dias < 0 ? ' vencida' : dias <= 2 ? ' pronto' : '';
   return `<span class="plazo${clase}">${textoPlazo(dias)}</span>`;
 };
+
+// Horas estimadas por tema. El valor 3 es la opción "+2 h" y cuenta 3 h en los totales.
+const HORAS_OPCIONES = [
+  [0.5, '0,5 h'],
+  [1, '1 h'],
+  [1.5, '1,5 h'],
+  [2, '2 h'],
+  [3, '+2 h'],
+];
+const fmtHoras = (n) => String(Math.round(n * 10) / 10).replace('.', ',');
+
+const ymd = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+const fechaDeYmd = (s) => {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d);
+};
+const lunesDe = (d) => {
+  const x = inicioDia(d);
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
+  return x;
+};
+const diaIso = (d) => ((d.getDay() + 6) % 7) + 1; // 1 = lunes ... 7 = domingo
+const minutos = (hhmm) => {
+  const [h, m] = hhmm.split(':').map(Number);
+  return h * 60 + m;
+};
+const hhmm = (min) => `${pad2(Math.floor(min / 60))}:${pad2(min % 60)}`;
+const fechaCorta = (d) => d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+// Franjas de estudio que caen en un día concreto.
+const horariosEnDia = (d) => {
+  const f = ymd(d);
+  const iso = diaIso(d);
+  return state.horarios.filter(
+    (h) => f >= h.fecha_desde && f <= h.fecha_hasta && h.dias_semana.split(',').map(Number).includes(iso)
+  );
+};
+
+state.semanaInicio = lunesDe(new Date());
 
 async function api(path, options = {}) {
   const res = await fetch(path, {
@@ -196,6 +237,9 @@ function temaHtml(tema) {
         <div class="tema-row">
           <label class="check">${casilla}<span class="check-text">${esc(tema.titulo)}</span></label>
           ${conteo}
+          <select class="horas-select" data-action="horas-tema" data-id="${tema.id}" aria-label="Horas de estudio de ${esc(tema.titulo)}">
+            ${HORAS_OPCIONES.map(([v, t]) => `<option value="${v}" ${Number(tema.horas) === v ? 'selected' : ''}>${t}</option>`).join('')}
+          </select>
           <button type="button" class="link danger" data-action="del-tema" data-id="${tema.id}" aria-label="Eliminar tema ${esc(tema.titulo)}">Eliminar</button>
         </div>
         ${hijos.length ? `<ul class="hijos">${hijos.map(hijoHtml).join('')}</ul>` : ''}
@@ -213,6 +257,8 @@ function renderAsignaturas() {
       const temas = state.temas.filter((t) => t.asignatura_id === a.id);
       const completos = temas.filter(temaCompleto).length;
       const pct = temas.length ? Math.round((completos / temas.length) * 100) : 0;
+      const horasTotal = temas.reduce((n, t) => n + Number(t.horas), 0);
+      const horasHechas = temas.filter(temaCompleto).reduce((n, t) => n + Number(t.horas), 0);
       const otras = state.tareas.filter((t) => t.asignatura_id === a.id && t.estado === 'hecha' && !t.tema_id);
       const temasHtml = temas.length
         ? temas.map(temaHtml).join('')
@@ -237,7 +283,7 @@ function renderAsignaturas() {
           <span class="asig-name">${esc(a.nombre)}</span>
           <span class="asig-prog">
             <span class="progreso" role="img" aria-label="${completos} de ${temas.length} temas completados"><i style="width:${pct}%"></i></span>
-            <span class="num row-meta">${temas.length ? `${completos}/${temas.length} temas` : 'sin temas'}</span>
+            <span class="num row-meta">${temas.length ? `${completos}/${temas.length} temas · ${fmtHoras(horasHechas)}/${fmtHoras(horasTotal)} horas` : 'sin temas'}</span>
           </span>
         </summary>
         <div class="asig-body">
@@ -375,6 +421,105 @@ function cancelEditTarea() {
   document.getElementById('btn-tarea-cancelar').hidden = true;
 }
 
+/* ---------- Horario ---------- */
+
+const DIAS_CORTO = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const PX_HORA = 48;
+
+function renderHorario() {
+  const lunes = state.semanaInicio;
+  const dias = [...Array(7)].map((_, i) => {
+    const d = new Date(lunes);
+    d.setDate(d.getDate() + i);
+    return d;
+  });
+  document.getElementById('horario-rango').textContent =
+    `${fechaCorta(dias[0])} – ${dias[6].toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+
+  // La franja visible abarca de 08:00 a 21:00 y se amplía si alguna sesión cae fuera.
+  let desde = 8 * 60;
+  let hasta = 21 * 60;
+  for (const h of state.horarios) {
+    desde = Math.min(desde, Math.floor(minutos(h.hora) / 60) * 60);
+    hasta = Math.max(hasta, Math.ceil((minutos(h.hora) + h.duracion_min) / 60) * 60);
+  }
+  const alto = ((hasta - desde) / 60) * PX_HORA;
+  const hoy = ymd(new Date());
+
+  const etiquetas = [];
+  const lineas = [];
+  for (let min = desde; min < hasta; min += 60) {
+    const top = ((min - desde) / 60) * PX_HORA;
+    etiquetas.push(`<span style="top:${top}px">${hhmm(min)}</span>`);
+    lineas.push(`<i style="top:${top}px"></i>`);
+  }
+
+  const cabeceras = dias
+    .map(
+      (d, i) =>
+        `<div class="sem-dia${ymd(d) === hoy ? ' today' : ''}${i >= 5 ? ' finde' : ''}"><span>${DIAS_CORTO[i]}</span><b>${d.getDate()}</b></div>`
+    )
+    .join('');
+
+  const columnas = dias
+    .map((d, i) => {
+      const ses = horariosEnDia(d)
+        .map((h) => ({ h, ini: minutos(h.hora), dur: h.duracion_min }))
+        .sort((a, b) => a.ini - b.ini);
+      // Las sesiones que se solapan se reparten en carriles lado a lado.
+      const finCarril = [];
+      for (const s of ses) {
+        let c = finCarril.findIndex((fin) => fin <= s.ini);
+        if (c === -1) c = finCarril.length;
+        finCarril[c] = s.ini + s.dur;
+        s.c = c;
+      }
+      const n = Math.max(1, finCarril.length);
+      const bloques = ses
+        .map(
+          (s) => `
+        <div class="sesion${n > 1 ? ' multi' : ''}" title="${esc(s.h.asignatura_nombre)} ${s.h.hora}–${hhmm(s.ini + s.dur)}" style="--c:${esc(s.h.asignatura_color)};top:${((s.ini - desde) / 60) * PX_HORA}px;height:${(s.dur / 60) * PX_HORA - 2}px;left:calc(${s.c} * 100% / ${n} + 2px);width:calc(100% / ${n} - 4px)">
+          <span class="sesion-nombre">${esc(s.h.asignatura_nombre)}</span>
+          <span class="sesion-hora">${s.h.hora}–${hhmm(s.ini + s.dur)}</span>
+        </div>`
+        )
+        .join('');
+      return `<div class="sem-col${ymd(d) === hoy ? ' today' : ''}${i >= 5 ? ' finde' : ''}" style="height:${alto}px">${bloques}</div>`;
+    })
+    .join('');
+
+  document.getElementById('horario-semana').innerHTML = `
+    <div class="semana">
+      <div class="sem-esquina"></div>${cabeceras}
+      <div class="sem-horas" style="height:${alto}px">${etiquetas.join('')}</div>${columnas}
+      <div class="sem-lineas" style="height:${alto}px">${lineas.join('')}</div>
+    </div>`;
+
+  const ul = document.getElementById('horario-franjas');
+  ul.innerHTML = state.horarios.length
+    ? state.horarios
+        .map((h) => {
+          const nombres = h.dias_semana
+            .split(',')
+            .map((i) => DIAS_CORTO[Number(i) - 1])
+            .join(', ');
+          const fin = hhmm(minutos(h.hora) + h.duracion_min);
+          return `
+    <li class="row">
+      <span class="dot" style="background:${esc(h.asignatura_color)}"></span>
+      <div class="row-main">
+        <span class="row-title">${esc(h.asignatura_nombre)}</span>
+        <span class="row-meta">${nombres} · ${fechaCorta(fechaDeYmd(h.fecha_desde))} – ${fechaCorta(fechaDeYmd(h.fecha_hasta))} · ${h.hora}–${fin}</span>
+      </div>
+      <div class="row-actions">
+        <button type="button" class="link danger" data-action="del-horario" data-id="${h.id}">Eliminar</button>
+      </div>
+    </li>`;
+        })
+        .join('')
+    : '<li class="empty">Aún no hay franjas de estudio. Añade la primera arriba.</li>';
+}
+
 /* ---------- Servidor ---------- */
 
 function renderCategoriasServidor() {
@@ -478,14 +623,17 @@ function renderCalendario() {
     const exs = porDia[d] || [];
     const tars = tareasPorDia[d] || [];
     const esHoy = d === hoy.getDate() && m === hoy.getMonth() && y === hoy.getFullYear();
+    const ses = horariosEnDia(new Date(y, m, d));
     const dots =
       exs.map((e) => `<i style="background:${esc(e.asignatura_color)}"></i>`).join('') +
-      tars.map((t) => `<i class="sq" style="background:${esc(t.asignatura_color)}"></i>`).join('');
+      tars.map((t) => `<i class="sq" style="background:${esc(t.asignatura_color)}"></i>`).join('') +
+      ses.map((h) => `<i class="st" style="background:${esc(h.asignatura_color)}"></i>`).join('');
     const title = [
       ...exs.map((e) => `Examen: ${e.asignatura_nombre}`),
       ...tars.map((t) => `Entrega: ${t.titulo} (${t.asignatura_nombre})`),
+      ...ses.map((h) => `Estudio: ${h.asignatura_nombre} ${h.hora}–${hhmm(minutos(h.hora) + h.duracion_min)}`),
     ].join('\n');
-    celdas += `<span class="cal-day${esHoy ? ' today' : ''}${exs.length || tars.length ? ' has-event' : ''}" ${title ? `title="${esc(title)}"` : ''}>
+    celdas += `<span class="cal-day${esHoy ? ' today' : ''}${exs.length || tars.length || ses.length ? ' has-event' : ''}" ${title ? `title="${esc(title)}"` : ''}>
       <b>${d}</b><span class="cal-dots">${dots}</span></span>`;
   }
 
@@ -499,7 +647,7 @@ function renderCalendario() {
       ${DIAS.map((d) => `<span class="cal-dow">${d}</span>`).join('')}
       ${celdas}
     </div>
-    <p class="cal-legend"><i></i> Examen <i class="sq"></i> Entrega de tarea</p>`;
+    <p class="cal-legend"><i></i> Examen <i class="sq"></i> Entrega <i class="st"></i> Estudio</p>`;
 }
 
 function resumenDashboard(data) {
@@ -577,7 +725,7 @@ function renderErrorCarga() {
   const hora = state.ultimaCarga ? ` Última carga correcta: ${pad2(state.ultimaCarga.getHours())}:${pad2(state.ultimaCarga.getMinutes())}.` : '';
   const aviso = `<li class="empty error">No se pudieron cargar los datos.${hora} <button type="button" class="link" data-action="reintentar">Reintentar</button></li>`;
   document
-    .querySelectorAll('#dashboard-examenes, #dashboard-tareas-estudios, #dashboard-tareas-servidor, #lista-tareas-obligatorias, #lista-tareas-opcionales, #lista-asignaturas, #lista-examenes, #lista-tareas-bugs, #lista-tareas-actualizaciones, #lista-categorias-servidor')
+    .querySelectorAll('#dashboard-examenes, #dashboard-tareas-estudios, #dashboard-tareas-servidor, #lista-tareas-obligatorias, #lista-tareas-opcionales, #lista-asignaturas, #lista-examenes, #horario-franjas, #lista-tareas-bugs, #lista-tareas-actualizaciones, #lista-categorias-servidor')
     .forEach((ul) => {
       ul.innerHTML = aviso;
     });
@@ -585,12 +733,13 @@ function renderErrorCarga() {
 
 async function loadAll() {
   try {
-    const [asignaturas, examenes, tareas, temas, subtemas, categoriasServidor, tareasServidor] = await Promise.all([
+    const [asignaturas, examenes, tareas, temas, subtemas, horarios, categoriasServidor, tareasServidor] = await Promise.all([
       api('/api/asignaturas'),
       api('/api/examenes'),
       api('/api/tareas'),
       api('/api/temas'),
       api('/api/subtemas'),
+      api('/api/horarios'),
       api('/api/categorias-servidor'),
       api('/api/tareas-servidor'),
     ]);
@@ -599,6 +748,7 @@ async function loadAll() {
     state.tareas = tareas;
     state.temas = temas;
     state.subtemas = subtemas;
+    state.horarios = horarios;
     state.categoriasServidor = categoriasServidor;
     state.tareasServidor = tareasServidor;
     fillAsignaturaSelects();
@@ -606,6 +756,7 @@ async function loadAll() {
     renderAsignaturas();
     renderExamenes();
     renderTareas();
+    renderHorario();
     renderCategoriasServidor();
     renderTareasServidor();
     await renderDashboard();
@@ -642,6 +793,41 @@ function initForms() {
       }),
     });
     e.target.reset();
+    await loadAll();
+  });
+
+  const formHorario = document.getElementById('form-horario');
+  formHorario.elements['fecha_desde'].value = ymd(new Date());
+  formHorario.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const aviso = document.getElementById('horario-error');
+    aviso.hidden = true;
+    const fd = new FormData(e.target);
+    const dias = fd.getAll('dias').map(Number);
+    if (dias.length === 0) {
+      aviso.textContent = 'Elige al menos un día de la semana.';
+      aviso.hidden = false;
+      return;
+    }
+    try {
+      await api('/api/horarios', {
+        method: 'POST',
+        body: JSON.stringify({
+          asignatura_id: Number(fd.get('asignatura_id')),
+          dias_semana: dias,
+          fecha_desde: fd.get('fecha_desde'),
+          fecha_hasta: fd.get('fecha_hasta'),
+          hora: fd.get('hora') || '16:00',
+          duracion_min: Number(fd.get('duracion_min')),
+        }),
+      });
+    } catch (err) {
+      aviso.textContent = err.message;
+      aviso.hidden = false;
+      return;
+    }
+    e.target.reset();
+    e.target.elements['fecha_desde'].value = ymd(new Date());
     await loadAll();
   });
 
@@ -752,6 +938,18 @@ function initListActions() {
       const d = new Date(state.calMes.y, state.calMes.m + (action === 'cal-next' ? 1 : -1), 1);
       state.calMes = { y: d.getFullYear(), m: d.getMonth() };
       renderCalendario();
+    } else if (action === 'sem-prev' || action === 'sem-next' || action === 'sem-hoy') {
+      if (action === 'sem-hoy') {
+        state.semanaInicio = lunesDe(new Date());
+      } else {
+        const d = new Date(state.semanaInicio);
+        d.setDate(d.getDate() + (action === 'sem-next' ? 7 : -7));
+        state.semanaInicio = d;
+      }
+      renderHorario();
+    } else if (action === 'del-horario') {
+      await api(`/api/horarios/${id}`, { method: 'DELETE' });
+      await loadAll();
     } else if (action === 'reintentar') {
       await loadAll();
     } else if (action === 'del-tema') {
@@ -817,6 +1015,12 @@ function initListActions() {
       } else if (action === 'toggle-hijo') {
         await api(`/api/subtemas/${id}`, { method: 'PUT', body: JSON.stringify({ completado: check.checked }) });
       }
+      await loadAll();
+      return;
+    }
+    const horas = e.target.closest('select[data-action="horas-tema"]');
+    if (horas) {
+      await api(`/api/temas/${horas.dataset.id}`, { method: 'PUT', body: JSON.stringify({ horas: Number(horas.value) }) });
       await loadAll();
       return;
     }

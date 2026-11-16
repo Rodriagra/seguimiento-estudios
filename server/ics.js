@@ -26,12 +26,15 @@ function foldLine(line) {
   return result + rest;
 }
 
-function buildEvent({ uid, start, summary, description, alarmMinutesBefore }) {
+// start/end pueden ser ISO (se convierten a UTC) o, para las sesiones de estudio, la hora "flotante"
+// ya formateada (AAAAMMDDTHHMMSS, sin Z): así 16:00 es 16:00 en el calendario de quien la lea.
+function buildEvent({ uid, start, startLocal, endLocal, summary, description, alarmMinutesBefore }) {
   const lines = [
     'BEGIN:VEVENT',
     `UID:${uid}`,
     `DTSTAMP:${toICSDate(new Date().toISOString())}`,
-    `DTSTART:${toICSDate(start)}`,
+    startLocal ? `DTSTART:${startLocal}` : `DTSTART:${toICSDate(start)}`,
+    ...(endLocal ? [`DTEND:${endLocal}`] : []),
     `SUMMARY:${escapeText(summary)}`,
   ];
   if (description) lines.push(`DESCRIPTION:${escapeText(description)}`);
@@ -48,8 +51,40 @@ function buildEvent({ uid, start, summary, description, alarmMinutesBefore }) {
   return lines.map(foldLine).join('\r\n');
 }
 
-export function buildCalendarFeed({ examenes, tareas }) {
+const pad = (n) => String(n).padStart(2, '0');
+
+// Una sesión por cada día del rango cuyo día de la semana (1 = lunes ... 7 = domingo) esté elegido.
+function* diasDeSesion(h) {
+  const [y1, m1, d1] = h.fecha_desde.split('-').map(Number);
+  const fin = Date.UTC(...h.fecha_hasta.split('-').map(Number).map((n, i) => (i === 1 ? n - 1 : n)));
+  const dias = h.dias_semana.split(',').map(Number);
+  let t = Date.UTC(y1, m1 - 1, d1);
+  for (let n = 0; t <= fin && n < 800; n++, t += 86400000) {
+    const d = new Date(t);
+    if (dias.includes(((d.getUTCDay() + 6) % 7) + 1)) yield d;
+  }
+}
+
+const flotante = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').slice(0, 15);
+
+export function buildCalendarFeed({ examenes, tareas, horarios = [] }) {
   const events = [];
+
+  for (const h of horarios) {
+    const [hh, mm] = h.hora.split(':').map(Number);
+    for (const dia of diasDeSesion(h)) {
+      const inicio = Date.UTC(dia.getUTCFullYear(), dia.getUTCMonth(), dia.getUTCDate(), hh, mm);
+      events.push(
+        buildEvent({
+          uid: `estudio-${h.id}-${dia.getUTCFullYear()}${pad(dia.getUTCMonth() + 1)}${pad(dia.getUTCDate())}@seguimiento-estudios`,
+          startLocal: flotante(inicio),
+          endLocal: flotante(inicio + h.duracion_min * 60000),
+          summary: `Estudio: ${h.asignatura_nombre}`,
+          alarmMinutesBefore: 30,
+        })
+      );
+    }
+  }
 
   for (const examen of examenes) {
     events.push(

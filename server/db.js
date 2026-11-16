@@ -49,6 +49,16 @@ db.exec(`
     completado INTEGER NOT NULL DEFAULT 0
   );
 
+  CREATE TABLE IF NOT EXISTS horarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asignatura_id INTEGER NOT NULL REFERENCES asignaturas(id) ON DELETE CASCADE,
+    dias_semana TEXT NOT NULL,
+    fecha_desde TEXT NOT NULL,
+    fecha_hasta TEXT NOT NULL,
+    hora TEXT NOT NULL DEFAULT '16:00',
+    duracion_min INTEGER NOT NULL DEFAULT 120
+  );
+
   CREATE TABLE IF NOT EXISTS categorias_servidor (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL UNIQUE,
@@ -106,6 +116,12 @@ if (!tareasServidorCols.includes('tipo')) {
 const tareasColsActuales = db.prepare('PRAGMA table_info(tareas)').all().map((c) => c.name);
 if (!tareasColsActuales.includes('tema_id')) {
   db.exec('ALTER TABLE tareas ADD COLUMN tema_id INTEGER REFERENCES temas(id) ON DELETE SET NULL');
+}
+
+// Migración: horas estimadas de estudio por tema (0.5, 1, 1.5, 2 o 3 para "+2 h"). Los temas existentes empiezan en 1.
+const temasCols = db.prepare('PRAGMA table_info(temas)').all().map((c) => c.name);
+if (!temasCols.includes('horas')) {
+  db.exec('ALTER TABLE temas ADD COLUMN horas REAL NOT NULL DEFAULT 1');
 }
 
 const ASIGNATURAS_INICIALES = [

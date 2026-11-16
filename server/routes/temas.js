@@ -3,6 +3,9 @@ import { db } from '../db.js';
 
 export const router = Router();
 
+// Horas estimadas permitidas; 3 es la opción "+2 h". Solo se pueden cambiar con el tema ya creado.
+const HORAS = [0.5, 1, 1.5, 2, 3];
+
 router.get('/', (req, res) => {
   res.json(db.prepare('SELECT * FROM temas ORDER BY asignatura_id, id').all());
 });
@@ -23,7 +26,13 @@ router.put('/:id', (req, res) => {
   if (!existing) return res.status(404).json({ error: 'no encontrado' });
   const titulo = req.body.titulo?.trim() || existing.titulo;
   const completado = 'completado' in req.body ? (req.body.completado ? 1 : 0) : existing.completado;
-  db.prepare('UPDATE temas SET titulo = ?, completado = ? WHERE id = ?').run(titulo, completado, req.params.id);
+  const horas = HORAS.includes(Number(req.body.horas)) ? Number(req.body.horas) : existing.horas;
+  db.prepare('UPDATE temas SET titulo = ?, completado = ?, horas = ? WHERE id = ?').run(
+    titulo,
+    completado,
+    horas,
+    req.params.id
+  );
   res.json(db.prepare('SELECT * FROM temas WHERE id = ?').get(req.params.id));
 });
 
